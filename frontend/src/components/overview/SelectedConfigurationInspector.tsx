@@ -17,8 +17,8 @@ interface SelectedConfigurationInspectorProps {
 
 // 3D Isometric Crystalline SVG matching the Selected Configuration icon in the reference
 const IsometricCrystalBadge: React.FC = () => (
-  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#F5F3FF] to-[#EDE9FE] border border-white shadow-sm flex items-center justify-center shrink-0">
-    <svg className="w-9 h-9" viewBox="0 0 40 40" fill="none">
+  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F5F3FF] to-[#EDE9FE] border border-white shadow-sm flex items-center justify-center shrink-0">
+    <svg className="w-7 h-7" viewBox="0 0 40 40" fill="none">
       <defs>
         <linearGradient id="crystalTop" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#DDD6FE" />
@@ -60,10 +60,10 @@ export const SelectedConfigurationInspector: React.FC<SelectedConfigurationInspe
   const isEvaluating = candidate.status === 'evaluating';
 
   return (
-    <div className="p-5 rounded-[24px] bg-white/85 backdrop-blur-xl border border-white shadow-[0_12px_32px_rgba(15,23,42,0.06)] flex flex-col justify-between select-none">
+    <div className="p-4 rounded-[22px] bg-white/85 backdrop-blur-xl border border-white shadow-[0_8px_26px_rgba(15,23,42,0.06)] flex flex-col justify-between select-none">
       <div>
         {/* Card Header */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-2.5">
           <span className="text-[14px] font-bold text-[#18213B] tracking-tight">
             Selected Configuration
           </span>
@@ -76,33 +76,33 @@ export const SelectedConfigurationInspector: React.FC<SelectedConfigurationInspe
         </div>
 
         {/* Model Info with 3D Crystal Thumbnail */}
-        <div className="flex items-start gap-3.5 mb-4">
+        <div className="flex items-start gap-3 mb-3">
           <IsometricCrystalBadge />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-[16px] font-extrabold text-[#18213B] truncate tracking-tight">
+            <div className="flex items-center justify-between gap-1.5">
+              <h3 className="text-[15.5px] font-extrabold text-[#18213B] truncate tracking-tight">
                 {candidate.modelName}
               </h3>
               <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#E5DFFF] text-[#6D5AE6]">
                 {candidate.status === 'selected' ? 'Selected' : candidate.status}
               </span>
             </div>
-            <div className="text-[13px] font-medium text-slate-600 mt-0.5">
+            <div className="text-[12.5px] font-medium text-slate-600 mt-0.5">
               {candidate.quantization}
             </div>
-            <div className="text-[11.5px] text-slate-400 truncate mt-0.5">
+            <div className="text-[11px] text-slate-400 truncate mt-0.5">
               {candidate.description}
             </div>
           </div>
         </div>
 
         {/* Clean Divider Metric Rows Matching Reference */}
-        <div className="divide-y divide-slate-100 border-t border-b border-slate-100 mb-4">
+        <div className="divide-y divide-slate-100 border-t border-b border-slate-100 mb-3">
           {/* Memory Usage */}
-          <div className="py-2.5 flex items-center justify-between">
+          <div className="py-2 flex items-center justify-between">
             <div className="flex items-center gap-2.5 text-slate-600">
               <Cpu className="w-4 h-4 text-slate-500 stroke-[1.8]" />
-              <span className="text-[12.5px] font-medium">Memory Usage</span>
+              <span className="text-[12px] font-medium">Memory Usage</span>
             </div>
             <span className="text-[13px] font-bold text-[#18213B]">
               {candidate.memoryUsageGb !== null
@@ -112,10 +112,10 @@ export const SelectedConfigurationInspector: React.FC<SelectedConfigurationInspe
           </div>
 
           {/* Inference Latency */}
-          <div className="py-2.5 flex items-center justify-between">
+          <div className="py-2 flex items-center justify-between">
             <div className="flex items-center gap-2.5 text-slate-600">
               <Clock className="w-4 h-4 text-slate-500 stroke-[1.8]" />
-              <span className="text-[12.5px] font-medium">Inference Latency</span>
+              <span className="text-[12px] font-medium">Inference Latency</span>
             </div>
             <span className="text-[13px] font-bold text-[#18213B]">
               {candidate.inferenceLatencyMs !== null
@@ -125,10 +125,10 @@ export const SelectedConfigurationInspector: React.FC<SelectedConfigurationInspe
           </div>
 
           {/* Quality Score */}
-          <div className="py-2.5 flex items-center justify-between">
+          <div className="py-2 flex items-center justify-between">
             <div className="flex items-center gap-2.5 text-slate-600">
               <Award className="w-4 h-4 text-slate-500 stroke-[1.8]" />
-              <span className="text-[12.5px] font-medium">Quality Score</span>
+              <span className="text-[12px] font-medium">Quality Score</span>
             </div>
             <span className="text-[13px] font-bold text-[#18213B]">
               {candidate.qualityScore !== null
@@ -141,35 +141,35 @@ export const SelectedConfigurationInspector: React.FC<SelectedConfigurationInspe
         {/* Lavender Gradient Action Button */}
         <button
           onClick={() => onViewDetails?.(candidate)}
-          className="w-full py-2.5 px-4 mb-4 rounded-xl bg-gradient-to-r from-[#DCD5FF] via-[#E2DCFF] to-[#EAE6FF] hover:from-[#D1C8FF] hover:to-[#E0DAFF] text-[#5B46E5] text-[13px] font-bold flex items-center justify-center gap-2 transition-all duration-200 shadow-sm"
+          className="w-full py-2.5 px-3.5 mb-3 rounded-xl bg-gradient-to-r from-[#DCD5FF] via-[#E2DCFF] to-[#EAE6FF] hover:from-[#D1C8FF] hover:to-[#E0DAFF] text-[#5B46E5] text-[12.5px] font-bold flex items-center justify-center gap-2 transition-all duration-200 shadow-sm"
         >
           <span>View Full Details</span>
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="w-3.5 h-3.5" />
         </button>
 
         {/* Status Section */}
         <div>
-          <div className="text-[12px] font-medium text-slate-500 mb-2">
+          <div className="text-[11.5px] font-medium text-slate-500 mb-1">
             Status
           </div>
-          <div className="flex items-center gap-2 mb-2.5">
+          <div className="flex items-center gap-2 mb-2">
             <span
-              className={`w-3 h-3 rounded-full ${isFeasible
-                  ? 'bg-[#10B981] ring-4 ring-emerald-500/15'
+              className={`w-2.5 h-2.5 rounded-full ${isFeasible
+                  ? 'bg-[#10B981] ring-2 ring-emerald-500/15'
                   : isRejected
-                    ? 'bg-rose-500 ring-4 ring-rose-500/15'
+                    ? 'bg-rose-500 ring-2 ring-rose-500/15'
                     : isEvaluating
                       ? 'bg-amber-500 animate-pulse'
                       : 'bg-slate-400'
                 }`}
             />
-            <span className="text-[13.5px] font-bold text-[#18213B]">
+            <span className="text-[13px] font-bold text-[#18213B]">
               {isFeasible ? 'Feasible' : isRejected ? 'Rejected' : isEvaluating ? 'Evaluating' : 'Unprofiled'}
             </span>
           </div>
 
-          <div className="space-y-1.5 text-[12px]">
-            <div className="flex items-center gap-2.5 text-slate-600">
+          <div className="space-y-1.5 text-[11.5px]">
+            <div className="flex items-center gap-2 text-slate-600">
               {candidate.constraints.withinMemoryBudget === true ? (
                 <Check className="w-3.5 h-3.5 text-[#10B981] stroke-[2.5]" />
               ) : (
@@ -178,7 +178,7 @@ export const SelectedConfigurationInspector: React.FC<SelectedConfigurationInspe
               <span>Within memory budget</span>
             </div>
 
-            <div className="flex items-center gap-2.5 text-slate-600">
+            <div className="flex items-center gap-2 text-slate-600">
               {candidate.constraints.meetsLatencyConstraint === true ? (
                 <Check className="w-3.5 h-3.5 text-[#10B981] stroke-[2.5]" />
               ) : (
@@ -187,7 +187,7 @@ export const SelectedConfigurationInspector: React.FC<SelectedConfigurationInspe
               <span>Meets latency constraint</span>
             </div>
 
-            <div className="flex items-center gap-2.5 text-slate-600">
+            <div className="flex items-center gap-2 text-slate-600">
               {candidate.constraints.qualityThresholdSatisfied === true ? (
                 <Check className="w-3.5 h-3.5 text-[#10B981] stroke-[2.5]" />
               ) : (

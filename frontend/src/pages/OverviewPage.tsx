@@ -43,13 +43,13 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
   } = data;
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 overflow-y-auto lg:overflow-hidden select-none">
+    <div className="flex-1 flex flex-col h-full min-h-0 overflow-y-auto select-none">
       {/* 
         UPPER WORKSPACE:
         Full-bleed 3D architectural landscape background with floating UI overlays.
         NO rounded corners or border on the 3D scene!
       */}
-      <div className="relative w-full h-[530px] lg:h-[550px] xl:h-[570px] shrink-0 overflow-hidden">
+      <div className="relative w-full h-[62vh] min-h-[460px] max-h-[600px] shrink-0 overflow-hidden">
         {/* 1. Underlying 3D Lattice Canvas extending across the entire upper section */}
         <div className="absolute inset-0">
           <LatticeCanvas
@@ -62,7 +62,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         {/* 2. Top-Left Floating Header: Breadcrumbs, Title, Subtitle & Configuration Space Legend */}
         <div className="absolute top-4 left-6 z-20 flex flex-col pointer-events-none">
           {/* Breadcrumb */}
-          <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400 mb-1 pointer-events-auto">
+          <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-400 mb-1 pointer-events-auto">
             <button className="flex items-center gap-1 hover:text-[#18213B] transition-colors">
               <ChevronLeft className="w-3.5 h-3.5" />
               <span className="w-1.5 h-1.5 rounded-full border border-slate-400 inline-block" />
@@ -71,15 +71,15 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           </div>
 
           {/* Heading & Subtitle */}
-          <h1 className="text-2xl font-extrabold text-[#18213B] tracking-tight">
+          <h1 className="text-2xl lg:text-[26px] font-extrabold text-[#18213B] tracking-tight leading-tight">
             System Overview
           </h1>
-          <p className="text-xs text-slate-500 font-normal mt-0.5 max-w-md">
+          <p className="text-[12.5px] text-slate-500 font-normal mt-0.5 max-w-lg">
             Live view of your models, resources and optimization experiments.
           </p>
 
           {/* Configuration Space Legend floating directly below subtitle */}
-          <div className="mt-3.5 pointer-events-auto">
+          <div className="mt-3 pointer-events-auto">
             <ConfigurationSpaceLegend
               stats={stats}
               isDemoMode={backendState.isDemoMode}
@@ -110,11 +110,11 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                   backendState.connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
                 }`}
               />
-              <div className="flex items-center gap-1.5 text-[11px]">
+              <div className="flex items-center gap-1.5 text-[11.5px]">
                 <span className="font-bold">
                   {backendState.connected ? 'Backend Connected' : 'Demo Mode'}
                 </span>
-                <span className="font-mono text-[10px] opacity-75 font-normal">
+                <span className="font-mono text-[10.5px] opacity-75 font-normal">
                   {backendState.endpoint}
                 </span>
               </div>
@@ -125,7 +125,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
               title="Search"
               className="p-1.5 rounded-xl glass-panel text-slate-500 hover:text-[#18213B] transition-colors"
             >
-              <Search className="w-3.5 h-3.5" />
+              <Search className="w-4 h-4" />
             </button>
 
             {/* Sparkles / Notifications Button */}
@@ -133,7 +133,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
               title="Optimization Assistant"
               className="p-1.5 rounded-xl glass-panel text-[#8174F5] hover:text-[#7162F3] transition-colors"
             >
-              <Sparkles className="w-3.5 h-3.5" />
+              <Sparkles className="w-4 h-4" />
             </button>
 
             {/* Window Controls */}
@@ -161,10 +161,10 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
 
           {/* View Mode Dropdown & Fullscreen right above Selected Configuration */}
           <div className="flex items-center gap-2 pointer-events-auto mt-0.5">
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl glass-panel text-xs font-medium text-slate-700 shadow-sm">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-panel text-[12px] font-medium text-slate-700 shadow-sm">
               <span className="text-slate-400 text-[11px]">View</span>
               <button className="flex items-center gap-1 font-semibold text-[#18213B] hover:text-[#8174F5] transition-colors">
-                <Share2 className="w-3 h-3 text-[#8174F5]" />
+                <Share2 className="w-3.5 h-3.5 text-[#8174F5]" />
                 <span>Lattice Topology</span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </button>
@@ -180,7 +180,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           </div>
 
           {/* Selected Configuration Inspector: Floating card over 3D scene on the right */}
-          <div className="pointer-events-auto mt-1 w-[340px] xl:w-[360px]">
+          <div className="pointer-events-auto mt-1 w-[325px] xl:w-[345px]">
             <SelectedConfigurationInspector
               candidate={selectedCandidate}
               onViewDetails={onViewCandidateDetails}
@@ -195,7 +195,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         Left: Metric Strip + Recent Experiments Table
         Right: Performance Trends Graph (aligned directly below Selected Configuration)
       */}
-      <div className="px-6 py-3 flex-1 flex flex-col lg:flex-row gap-3.5 min-h-[250px]">
+      <div className="px-5 py-3 flex-1 flex flex-col lg:flex-row gap-3.5 min-h-[240px]">
         {/* Left: Metrics & Recent Experiments */}
         <div className="flex-1 min-w-0 flex flex-col justify-between gap-3">
           <CompactMetricsStrip metrics={metrics} />
@@ -213,7 +213,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         </div>
 
         {/* Right: Performance Trends (aligned underneath Selected Configuration) */}
-        <div className="w-full lg:w-[340px] xl:w-[360px] shrink-0 flex flex-col">
+        <div className="w-full lg:w-[325px] xl:w-[345px] shrink-0 flex flex-col">
           <PerformanceTrendsChart trendData={performanceTrends} />
         </div>
       </div>
