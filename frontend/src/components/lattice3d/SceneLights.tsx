@@ -1,35 +1,50 @@
 import React from 'react';
+import { Environment, ContactShadows } from '@react-three/drei';
 
-export const SceneLights: React.FC = () => {
+export const SceneLights: React.FC = React.memo(() => {
   return (
     <>
-      {/* Soft main ambient illumination */}
-      <ambientLight intensity={0.9} color="#ffffff" />
+      {/* Studio environment reflections with low overhead */}
+      <Environment preset="city" environmentIntensity={0.5} />
 
-      {/* Primary directional architectural light */}
+      {/* High-key bright studio ambient light */}
+      <ambientLight intensity={1.15} color="#FFFFFF" />
+
+      {/* Main directional light with lightweight 1024 shadow map */}
       <directionalLight
-        position={[20, 30, 20]}
-        intensity={1.4}
-        color="#f8faff"
+        position={[16, 26, 16]}
+        intensity={1.35}
+        color="#FFFFFF"
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
-        shadow-camera-near={0.5}
-        shadow-camera-far={60}
-        shadow-camera-left={-15}
-        shadow-camera-right={15}
-        shadow-camera-top={15}
-        shadow-camera-bottom={-15}
+        shadow-bias={-0.0003}
+        shadow-camera-near={1}
+        shadow-camera-far={50}
+        shadow-camera-left={-12}
+        shadow-camera-right={12}
+        shadow-camera-top={12}
+        shadow-camera-bottom={-12}
       />
 
-      {/* Cool blue fill from the front-left */}
-      <directionalLight position={[-15, 12, 10]} intensity={0.5} color="#5598F7" />
+      {/* Soft Pastel Fill Lights */}
+      <directionalLight position={[-15, 12, 10]} intensity={0.5} color="#93C5FD" />
+      <directionalLight position={[6, 14, -16]} intensity={0.6} color="#C4B5FD" />
 
-      {/* Subtle violet rim light from the rear */}
-      <directionalLight position={[5, 15, -20]} intensity={0.7} color="#8174F5" />
+      {/* Single central point light for the Optimizer core */}
+      <pointLight position={[0, 1.8, 0]} intensity={1.8} distance={9} color="#A78BFA" />
 
-      {/* Central crystal core warm violet point light */}
-      <pointLight position={[0, 2.5, 0]} intensity={2.2} distance={12} color="#8174F5" />
+      {/* Baked ContactShadows (frames={1} renders ONCE on mount for 0ms runtime lag) */}
+      <ContactShadows
+        position={[0, -0.44, 0]}
+        frames={1}
+        resolution={512}
+        opacity={0.3}
+        scale={24}
+        blur={2.0}
+        far={5}
+        color="#334155"
+      />
     </>
   );
-};
+});

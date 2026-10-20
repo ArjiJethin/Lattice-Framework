@@ -76,8 +76,8 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
   const resetCamera = () => {
     if (controlsRef.current) {
       controlsRef.current.reset();
-      controlsRef.current.object.position.set(16, 15, 16);
-      controlsRef.current.target.set(-0.8, 1.2, 0);
+      controlsRef.current.object.position.set(14.5, 12.0, 15.5);
+      controlsRef.current.target.set(0.2, 0.7, 0.2);
       controlsRef.current.update();
     }
   };
@@ -92,47 +92,43 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
   };
 
   return (
-    <div className="relative w-full h-full select-none overflow-hidden bg-gradient-to-br from-[#F0F3F7] via-[#F3F5F8] to-[#EBF0F6]">
+    <div className="relative w-full h-full select-none overflow-hidden bg-[radial-gradient(ellipse_at_center,_#FFFFFF_0%,_#F1F5F9_65%,_#E2E8F0_100%)]">
       <WebGLErrorBoundary>
         <Canvas
           shadows
+          dpr={[1, 1.5]}
           camera={{
-            position: [16, 15, 16],
-            fov: 34,
-            near: 0.1,
-            far: 100,
+            position: [14.5, 12.0, 15.5],
+            fov: 29,
+            near: 0.5,
+            far: 80,
           }}
           gl={{
             antialias: true,
             alpha: true,
+            toneMapping: THREE.ACESFilmicToneMapping,
+            toneMappingExposure: 1.08,
             powerPreference: 'high-performance',
           }}
           onPointerDown={() => setIsOrbiting(true)}
           onPointerUp={() => setIsOrbiting(false)}
         >
-          {/* Controls with soft constraints */}
           <OrbitControls
             ref={controlsRef}
-            target={[-0.8, 1.2, 0]}
+            target={[0.2, 0.7, 0.2]}
             enableDamping
             dampingFactor={0.08}
-            minDistance={10}
-            maxDistance={40}
+            minDistance={9}
+            maxDistance={32}
             minPolarAngle={Math.PI / 6}
-            maxPolarAngle={Math.PI / 2.2}
-            rotateSpeed={0.7}
+            maxPolarAngle={Math.PI / 2.3}
+            rotateSpeed={0.65}
           />
 
-          {/* Lighting */}
           <SceneLights />
-
-          {/* Architectural Foundation & Platforms */}
           <Foundation />
-
-          {/* Interconnecting Laser Bus Conduits & Rail Bridges */}
           <ConnectingBridges />
 
-          {/* Candidate & System Nodes */}
           {candidates.map((cand) => (
             <LatticeNode
               key={cand.id}
@@ -145,7 +141,7 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
       </WebGLErrorBoundary>
 
       {/* Floating Canvas Camera Controls Overlay */}
-      <div className="absolute bottom-3 left-6 z-10 flex items-center gap-1.5 p-1 rounded-xl glass-floating text-slate-600">
+      <div className="absolute bottom-3 left-6 z-10 flex items-center gap-1.5 p-1 rounded-xl bg-white/80 backdrop-blur-md border border-white shadow-sm text-slate-600">
         <button
           onClick={() => handleZoom(-0.15)}
           title="Zoom In"
@@ -171,9 +167,8 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
         </button>
       </div>
 
-      {/* Orbit interaction hint */}
       {isOrbiting && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none px-3 py-1 bg-black/60 backdrop-blur-md text-white text-[11px] rounded-full font-medium">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none px-3 py-1 bg-slate-900/70 backdrop-blur-md text-white text-[11px] rounded-full font-medium">
           Rotating Isometric View
         </div>
       )}
