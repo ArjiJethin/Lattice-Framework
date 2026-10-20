@@ -36,27 +36,27 @@ export default function App(): React.ReactElement {
 
       {/* Main Content Workspace Area */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
-        {/* Top Header */}
-        <Header
-          backendState={overviewData.backendState}
-          onRefreshConnection={overviewData.refreshConnection}
-          onToggleFullscreen={handleToggleFullscreen}
-        />
-
-        {/* Dynamic Viewport */}
-        <main className="flex-1 flex flex-col min-h-0 overflow-y-auto">
-          {activeNav === 'overview' ? (
-            <OverviewPage
-              data={overviewData}
-              onViewCandidateDetails={(cand) => setInspectingCandidate(cand)}
+        {activeNav === 'overview' ? (
+          <OverviewPage
+            data={overviewData}
+            onViewCandidateDetails={(cand) => setInspectingCandidate(cand)}
+            onToggleFullscreen={handleToggleFullscreen}
+          />
+        ) : (
+          <>
+            <Header
+              backendState={overviewData.backendState}
+              onRefreshConnection={overviewData.refreshConnection}
+              onToggleFullscreen={handleToggleFullscreen}
             />
-          ) : (
-            <PlaceholderPage
-              navKey={activeNav}
-              onBackToOverview={() => setActiveNav('overview')}
-            />
-          )}
-        </main>
+            <main className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+              <PlaceholderPage
+                navKey={activeNav}
+                onBackToOverview={() => setActiveNav('overview')}
+              />
+            </main>
+          </>
+        )}
       </div>
 
       {/* Candidate Full Constraints & Details Modal */}

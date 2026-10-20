@@ -25,7 +25,7 @@ export const SelectedConfigurationInspector: React.FC<SelectedConfigurationInspe
   const isEvaluating = candidate.status === 'evaluating';
 
   return (
-    <div className="h-full p-4 rounded-2xl glass-panel flex flex-col justify-between select-none">
+    <div className="p-4 rounded-3xl glass-floating flex flex-col justify-between select-none">
       <div>
         {/* Card Top Title Bar */}
         <div className="flex items-center justify-between pb-2.5 border-b border-slate-100/80 mb-3">

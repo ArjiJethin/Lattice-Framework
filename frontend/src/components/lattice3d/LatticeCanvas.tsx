@@ -77,7 +77,7 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
     if (controlsRef.current) {
       controlsRef.current.reset();
       controlsRef.current.object.position.set(16, 15, 16);
-      controlsRef.current.target.set(0, 1.2, 0);
+      controlsRef.current.target.set(-0.8, 1.2, 0);
       controlsRef.current.update();
     }
   };
@@ -92,7 +92,7 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
   };
 
   return (
-    <div className="relative w-full h-full min-h-[460px] select-none rounded-2xl overflow-hidden bg-gradient-to-br from-[#ECEFF4] via-[#F4F6F9] to-[#E9EDF3]">
+    <div className="relative w-full h-full select-none overflow-hidden bg-gradient-to-br from-[#F0F3F7] via-[#F3F5F8] to-[#EBF0F6]">
       <WebGLErrorBoundary>
         <Canvas
           shadows
@@ -113,7 +113,7 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
           {/* Controls with soft constraints */}
           <OrbitControls
             ref={controlsRef}
-            target={[0, 1.2, 0]}
+            target={[-0.8, 1.2, 0]}
             enableDamping
             dampingFactor={0.08}
             minDistance={10}
@@ -145,7 +145,7 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
       </WebGLErrorBoundary>
 
       {/* Floating Canvas Camera Controls Overlay */}
-      <div className="absolute bottom-4 right-4 flex items-center gap-1.5 p-1.5 rounded-xl glass-floating text-slate-600">
+      <div className="absolute bottom-3 left-6 z-10 flex items-center gap-1.5 p-1 rounded-xl glass-floating text-slate-600">
         <button
           onClick={() => handleZoom(-0.15)}
           title="Zoom In"
