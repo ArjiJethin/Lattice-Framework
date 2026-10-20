@@ -38,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside className="w-[215px] shrink-0 h-screen bg-[#F1F3F6] border-r border-slate-200/80 flex flex-col justify-between p-4 select-none">
+    <aside className="w-[215px] shrink-0 h-screen bg-white/45 backdrop-blur-xl border-r border-slate-200/70 flex flex-col justify-between p-4 select-none">
       {/* Top: Lattice Geometric Logo & Navigation */}
       <div>
         {/* Brand Header */}
@@ -114,7 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Bottom: Current Model & Backend Connection Indicator */}
       <div className="space-y-3 pt-3 border-t border-slate-200/60 text-left">
         {/* Current Model Badge */}
-        <div className="p-2.5 rounded-xl bg-white/80 border border-slate-200/70 shadow-sm">
+        <div className="p-2.5 rounded-xl glass-card">
           <div className="text-[10px] font-semibold text-slate-400 mb-1">
             Current Model
           </div>

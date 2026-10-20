@@ -25,7 +25,7 @@ export default function App(): React.ReactElement {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#F1F3F6] text-[#18213B] font-sans">
+    <div className="flex h-screen w-screen overflow-hidden lattice-window-bg text-[#18213B] font-sans">
       {/* Persistent Left Sidebar */}
       <Sidebar
         activeNav={activeNav}

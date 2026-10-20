@@ -19,7 +19,7 @@ export const ConfigurationSpaceLegend: React.FC<ConfigurationSpaceLegendProps> =
   ];
 
   return (
-    <div className="absolute top-4 left-4 z-10 w-48 p-3.5 rounded-2xl bg-white/90 backdrop-blur-md border border-white/95 shadow-glass-sm select-none">
+    <div className="absolute top-4 left-4 z-10 w-48 p-3.5 rounded-2xl glass-floating select-none">
       <div className="flex items-center justify-between mb-2.5">
         <h4 className="text-[12px] font-semibold text-[#18213B] tracking-tight">
           Configuration Space

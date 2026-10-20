@@ -29,18 +29,18 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
   } = data;
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-      {/* Upper Area: 3D Lattice Hero Workspace + Selected Configuration Inspector */}
-      <section className="flex flex-col lg:flex-row gap-4 items-stretch min-h-[460px]">
-        {/* 3D Scene Container (takes ~65% on desktop) */}
-        <div className="relative flex-1 min-h-[460px] rounded-2xl overflow-hidden border border-slate-200/80 shadow-card">
+    <div className="flex-1 flex flex-col h-full min-h-0 px-5 py-3.5 gap-3.5 overflow-y-auto lg:overflow-hidden select-none">
+      {/* Top Row: 3D Lattice Canvas (Left) + Selected Configuration (Right) */}
+      <div className="flex-1 min-h-[380px] lg:min-h-[400px] flex flex-col lg:flex-row gap-3.5">
+        {/* 3D Scene Hero Workspace */}
+        <div className="flex-1 min-w-0 relative rounded-2xl overflow-hidden glass-panel">
           {/* Floating Configuration Space Legend */}
           <ConfigurationSpaceLegend
             stats={stats}
             isDemoMode={backendState.isDemoMode}
           />
 
-          {/* Genuine 3D Lattice Canvas */}
+          {/* 3D Three.js Scene */}
           <LatticeCanvas
             candidates={candidates}
             selectedCandidateId={selectedCandidate.id}
@@ -48,34 +48,38 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           />
         </div>
 
-        {/* Selected Configuration Inspector (docked on right) */}
-        <SelectedConfigurationInspector
-          candidate={selectedCandidate}
-          onViewDetails={onViewCandidateDetails}
-        />
-      </section>
-
-      {/* Lower Area: Analytics, Metrics & Recent Experiments */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-        {/* Left Column: Metric Strip + Recent Experiments Table (7 cols) */}
-        <div className="lg:col-span-7 space-y-4 flex flex-col justify-between">
-          <CompactMetricsStrip metrics={metrics} />
-          <RecentExperimentsTable
-            experiments={experiments}
-            selectedCandidateId={selectedCandidate.id}
-            onSelectExperiment={(exp) => {
-              if (exp.candidateId) {
-                selectCandidate(exp.candidateId);
-              }
-            }}
+        {/* Selected Configuration Inspector (Right Top) */}
+        <div className="w-full lg:w-[360px] xl:w-[380px] shrink-0 flex flex-col">
+          <SelectedConfigurationInspector
+            candidate={selectedCandidate}
+            onViewDetails={onViewCandidateDetails}
           />
         </div>
+      </div>
 
-        {/* Right Column: Performance Trends ECharts (5 cols) */}
-        <div className="lg:col-span-5 flex flex-col">
+      {/* Bottom Row: Metrics Strip + Recent Experiments (Left) + Performance Trends (Right) */}
+      <div className="h-[280px] shrink-0 flex flex-col lg:flex-row gap-3.5">
+        {/* Bottom Left: Metrics + Recent Experiments */}
+        <div className="flex-1 min-w-0 flex flex-col justify-between gap-3">
+          <CompactMetricsStrip metrics={metrics} />
+          <div className="flex-1 min-h-0">
+            <RecentExperimentsTable
+              experiments={experiments}
+              selectedCandidateId={selectedCandidate.id}
+              onSelectExperiment={(exp) => {
+                if (exp.candidateId) {
+                  selectCandidate(exp.candidateId);
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Bottom Right: Performance Trends Chart */}
+        <div className="w-full lg:w-[360px] xl:w-[380px] shrink-0 flex flex-col">
           <PerformanceTrendsChart trendData={performanceTrends} />
         </div>
-      </section>
+      </div>
     </div>
   );
 };

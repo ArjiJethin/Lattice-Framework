@@ -144,12 +144,12 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
               e.stopPropagation();
               onSelect(candidate.id);
             }}
-            className={`cursor-pointer whitespace-nowrap px-3 py-1.5 rounded-lg border text-left transition-all duration-200 select-none shadow-sm backdrop-blur-md ${
+            className={`cursor-pointer whitespace-nowrap px-3 py-1.5 rounded-xl border text-left transition-all duration-200 select-none backdrop-blur-xl ${
               isSelected
-                ? 'bg-white/95 border-[#8174F5] ring-2 ring-[#8174F5]/20 shadow-md'
+                ? 'bg-white/95 border-[#8174F5] ring-2 ring-[#8174F5]/30 shadow-lg shadow-[#8174F5]/15'
                 : isHovered
-                ? 'bg-white/95 border-[#8174F5]/60 shadow-md'
-                : 'bg-white/90 border-slate-200/90'
+                ? 'bg-white/95 border-[#8174F5]/70 shadow-md shadow-[#8174F5]/10 scale-105'
+                : 'bg-white/85 border-white/90 shadow-glass-sm'
             }`}
           >
             <div className="flex items-center gap-1.5">

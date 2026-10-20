@@ -145,7 +145,7 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
       </WebGLErrorBoundary>
 
       {/* Floating Canvas Camera Controls Overlay */}
-      <div className="absolute bottom-4 right-4 flex items-center gap-1.5 p-1.5 rounded-xl bg-white/80 backdrop-blur-md border border-white/90 shadow-glass-sm text-slate-600">
+      <div className="absolute bottom-4 right-4 flex items-center gap-1.5 p-1.5 rounded-xl glass-floating text-slate-600">
         <button
           onClick={() => handleZoom(-0.15)}
           title="Zoom In"

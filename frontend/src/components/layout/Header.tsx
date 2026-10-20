@@ -23,7 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleFullscreen,
 }) => {
   return (
-    <header className="w-full px-6 pt-3 pb-2 flex items-center justify-between border-b border-slate-200/50 bg-[#F1F3F6] select-none">
+    <header className="w-full px-6 pt-3 pb-2 flex items-center justify-between border-b border-slate-200/60 bg-white/40 backdrop-blur-md select-none">
       {/* Left: Breadcrumbs & Heading */}
       <div className="flex flex-col text-left">
         <div className="flex items-center gap-1 text-[11px] font-medium text-slate-400 mb-0.5">
