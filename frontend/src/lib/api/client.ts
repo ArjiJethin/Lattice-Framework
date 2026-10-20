@@ -18,7 +18,6 @@ import {
 } from './demoData';
 
 const BACKEND_BASE_URL =
-  // @ts-expect-error import.meta.env is provided by Vite
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) ||
   'http://127.0.0.1:8000';
 
