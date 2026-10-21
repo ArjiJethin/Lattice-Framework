@@ -76,8 +76,8 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
   const resetCamera = () => {
     if (controlsRef.current) {
       controlsRef.current.reset();
-      controlsRef.current.object.position.set(14.5, 12.0, 15.5);
-      controlsRef.current.target.set(0.2, 0.7, 0.2);
+      controlsRef.current.object.position.set(13.2, 10.8, 14.2);
+      controlsRef.current.target.set(0.1, 0., 0.2);
       controlsRef.current.update();
     }
   };
@@ -92,14 +92,14 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
   };
 
   return (
-    <div className="relative w-full h-full select-none overflow-hidden bg-[radial-gradient(ellipse_at_center,_#FFFFFF_0%,_#F1F5F9_65%,_#E2E8F0_100%)]">
+    <div className="relative w-full h-full select-none overflow-hidden bg-[radial-gradient(ellipse_at_50%_42%,_#FFFFFF_0%,_#EEF2F8_55%,_#DCE3EE_100%)]">
       <WebGLErrorBoundary>
         <Canvas
           shadows
           dpr={[1, 1.5]}
           camera={{
-            position: [14.5, 12.0, 15.5],
-            fov: 29,
+            position: [13.2, 10.8, 14.2],
+            fov: 28,
             near: 0.5,
             far: 80,
           }}
@@ -107,7 +107,7 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
             antialias: true,
             alpha: true,
             toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: 1.08,
+            toneMappingExposure: 1.12,
             powerPreference: 'high-performance',
           }}
           onPointerDown={() => setIsOrbiting(true)}
@@ -115,13 +115,15 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
         >
           <OrbitControls
             ref={controlsRef}
-            target={[0.2, 0.7, 0.2]}
+            target={[0.1, 0.55, 0.2]}
             enableDamping
             dampingFactor={0.08}
-            minDistance={9}
+            enableZoom={true}
+            zoomSpeed={0.85}
+            minDistance={8}
             maxDistance={32}
             minPolarAngle={Math.PI / 6}
-            maxPolarAngle={Math.PI / 2.3}
+            maxPolarAngle={Math.PI / 2.35}
             rotateSpeed={0.65}
           />
 

@@ -34,28 +34,29 @@ export default function App(): React.ReactElement {
         backendState={overviewData.backendState}
       />
 
-      {/* Main Content Workspace Area */}
-      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
+      {/* Main Content Workspace Area - Vertically scrollable while persistent sidebar stays fixed */}
+      <div className="flex-1 h-screen min-w-0 overflow-y-auto overflow-x-hidden relative flex flex-col scroll-smooth">
         {activeNav === 'overview' ? (
           <OverviewPage
             data={overviewData}
             onViewCandidateDetails={(cand) => setInspectingCandidate(cand)}
             onToggleFullscreen={handleToggleFullscreen}
+            onNavigate={setActiveNav}
           />
         ) : (
-          <>
+          <div className="flex-1 flex flex-col min-h-full">
             <Header
               backendState={overviewData.backendState}
               onRefreshConnection={overviewData.refreshConnection}
               onToggleFullscreen={handleToggleFullscreen}
             />
-            <main className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+            <main className="flex-1 flex flex-col min-h-0">
               <PlaceholderPage
                 navKey={activeNav}
                 onBackToOverview={() => setActiveNav('overview')}
               />
             </main>
-          </>
+          </div>
         )}
       </div>
 

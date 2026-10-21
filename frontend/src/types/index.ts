@@ -12,6 +12,8 @@ export interface CandidateConstraints {
   qualityThresholdSatisfied: boolean | null;
 }
 
+export type DataProvenance = 'live_backend' | 'demo_fixture' | 'stale_cache';
+
 export interface ConfigurationCandidate {
   id: string;
   name: string;
@@ -32,6 +34,9 @@ export interface ConfigurationCandidate {
   platformIndex?: number;
   badgeText?: string;
   subLabel?: string;
+  rejectionReason?: string | null;
+  measuredAt?: string | null;
+  provenance?: DataProvenance;
 }
 
 export interface ConfigurationSpaceStats {
@@ -44,13 +49,15 @@ export interface ConfigurationSpaceStats {
 }
 
 export interface OverviewMetrics {
-  inferenceLatencyMs: number;
-  inferenceLatencyChangePct: number;
-  generationSpeedToks: number;
-  generationSpeedChangePct: number;
-  gpuMemoryUsedGb: number;
+  inferenceLatencyMs: number | null;
+  inferenceLatencyChangePct: number | null;
+  generationSpeedToks: number | null;
+  generationSpeedChangePct: number | null;
+  gpuMemoryUsedGb: number | null;
   gpuMemoryTotalGb: number;
-  gpuMemoryUsagePct: number;
+  gpuMemoryUsagePct: number | null;
+  provenance?: DataProvenance;
+  lastMeasuredAt?: string;
 }
 
 export type ExperimentStatus = 'Completed' | 'Partial' | 'Failed' | 'Running';
@@ -61,9 +68,12 @@ export interface ExperimentItem {
   configuration: string;
   objective: string;
   result: ExperimentStatus;
-  latencyMs: number;
+  latencyMs: number | null;
   date: string;
   candidateId?: string;
+  throughputToks?: number | null;
+  qualityScore?: number | null;
+  errorMessage?: string;
 }
 
 export interface PerformanceTrendPoint {
@@ -71,11 +81,13 @@ export interface PerformanceTrendPoint {
   latencyMs: number;
   throughputToks: number;
   gpuMemoryGb: number;
+  timestamp?: string;
 }
 
 export interface PerformanceTrendData {
   timeRange: string;
   points: PerformanceTrendPoint[];
+  provenance?: DataProvenance;
 }
 
 export interface ActiveModelInfo {
@@ -83,6 +95,16 @@ export interface ActiveModelInfo {
   quantization: string;
   runtime: string;
   status: string;
+  contextWindow?: number;
+  architecture?: string;
+}
+
+export interface HardwareInfo {
+  device: string;
+  vramTotalGb: number;
+  vramUsedGb: number;
+  cudaAvailable: boolean;
+  computeCapability?: string;
 }
 
 export interface BackendConnectionState {
@@ -94,4 +116,31 @@ export interface BackendConnectionState {
   latencyMs?: number;
   lastChecked?: string;
   error?: string | null;
+  isConnecting?: boolean;
+}
+
+export type OptimizationObjective = 'balanced' | 'latency' | 'throughput' | 'memory';
+
+export interface OptimizationPlanRequest {
+  modelName: string;
+  targetHardware?: string;
+  memoryBudgetGb: number;
+  maxLatencyMs: number;
+  minQualityScore?: number;
+  objective: OptimizationObjective;
+}
+
+export interface OptimizationPlanResponse {
+  decisionId: string;
+  status: 'optimal' | 'feasible' | 'infeasible';
+  selectedCandidateId: string;
+  rationale: string;
+  candidateProfiles: ConfigurationCandidate[];
+  timestamp: string;
+}
+
+export interface SystemStatusResponse {
+  connected: boolean;
+  activeModel: ActiveModelInfo;
+  hardware: HardwareInfo;
 }

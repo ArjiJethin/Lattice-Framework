@@ -10,11 +10,41 @@ interface LatticeNodeProps {
   onSelect: (id: string) => void;
 }
 
-// Shared geometries created once in memory for maximum performance
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
 const UNIT_OCTA = new THREE.OctahedronGeometry(1, 0);
-const UNIT_CYLINDER = new THREE.CylinderGeometry(1, 1, 1, 6);
+const UNIT_CYLINDER = new THREE.CylinderGeometry(1, 1, 1, 8);
+const UNIT_SPHERE = new THREE.SphereGeometry(1, 10, 10);
 const UNIT_PLANE = new THREE.PlaneGeometry(1, 1);
+
+// Precompute the 12 face-diagonals + 4 space-diagonals of a unit cube so every crystal face
+// has the exact X-faceted geometric wireframe seen in the reference image.
+const CUBE_FACE_DIAGONALS_GEO = (() => {
+  const h = 0.5;
+  const c = [
+    new THREE.Vector3(-h, -h, -h), // 0
+    new THREE.Vector3(h, -h, -h),  // 1
+    new THREE.Vector3(h, h, -h),   // 2
+    new THREE.Vector3(-h, h, -h),  // 3
+    new THREE.Vector3(-h, -h, h),  // 4
+    new THREE.Vector3(h, -h, h),   // 5
+    new THREE.Vector3(h, h, h),    // 6
+    new THREE.Vector3(-h, h, h),   // 7
+  ];
+  const pairs = [
+    // 6 Faces * 2 diagonals = 12 face diagonals
+    [0, 2], [1, 3], // Back
+    [4, 6], [5, 7], // Front
+    [0, 7], [3, 4], // Left
+    [1, 6], [2, 5], // Right
+    [3, 6], [2, 7], // Top
+    [0, 5], [1, 4], // Bottom
+  ];
+  const pts: THREE.Vector3[] = [];
+  pairs.forEach(([a, b]) => {
+    pts.push(c[a], c[b]);
+  });
+  return new THREE.BufferGeometry().setFromPoints(pts);
+})();
 
 const DIAGONAL_QUATERNIONS = [
   new THREE.Vector3(1, 1, 1).normalize(),
@@ -23,134 +53,174 @@ const DIAGONAL_QUATERNIONS = [
   new THREE.Vector3(-1, 1, -1).normalize(),
 ].map((d) => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d));
 
+const VERTEX_OFFSETS: Array<[number, number, number]> = [
+  // 8 Cube Corners
+  [-0.48, -0.48, -0.48],
+  [0.48, -0.48, -0.48],
+  [-0.48, 0.48, -0.48],
+  [0.48, 0.48, -0.48],
+  [-0.48, -0.48, 0.48],
+  [0.48, -0.48, 0.48],
+  [-0.48, 0.48, 0.48],
+  [0.48, 0.48, 0.48],
+  // 6 Face Centers
+  [0.49, 0, 0],
+  [-0.49, 0, 0],
+  [0, 0.49, 0],
+  [0, -0.49, 0],
+  [0, 0, 0.49],
+  [0, 0, -0.49],
+];
+
 /**
- * Lightweight internal glowing X-lattice struts using Additive Blending
- * so the inside of the crystal looks bright, airy, and luminous like the reference.
+ * Internal 3D Space-Diagonal Lattice + Glowing Vertex Nodes
  */
-const InternalLatticeStruts: React.FC<{
+const InternalLatticeStructure: React.FC<{
   size: number;
   glowColor: string;
 }> = React.memo(({ size, glowColor }) => {
-  const diagLen = size * Math.sqrt(3) * 0.94;
-  const r = size * 0.014;
-
-  const strutMaterial = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        color: '#FFFFFF',
-        transparent: true,
-        opacity: 0.9,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      }),
-    []
-  );
-
-  const haloMaterial = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        color: glowColor,
-        transparent: true,
-        opacity: 0.55,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      }),
-    [glowColor]
-  );
+  const diagLen = size * Math.sqrt(3) * 0.95;
+  const r = size * 0.013;
 
   return (
     <group>
-      {/* 4 Space Diagonals (White Core + Colored Glow Halo) */}
+      {/* 4 Corner-to-Corner Space Diagonals */}
       {DIAGONAL_QUATERNIONS.map((q, i) => (
         <group key={i} quaternion={q}>
-          <mesh geometry={UNIT_CYLINDER} material={strutMaterial} scale={[r, diagLen, r]} />
-          <mesh
-            geometry={UNIT_CYLINDER}
-            material={haloMaterial}
-            scale={[r * 2.6, diagLen, r * 2.6]}
-          />
+          <mesh geometry={UNIT_CYLINDER} scale={[r, diagLen, r]}>
+            <meshBasicMaterial
+              color="#FFFFFF"
+              transparent
+              opacity={0.92}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh geometry={UNIT_CYLINDER} scale={[r * 2.8, diagLen, r * 2.8]}>
+            <meshBasicMaterial
+              color={glowColor}
+              transparent
+              opacity={0.5}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
         </group>
       ))}
 
       {/* 3 Central X/Y/Z Axis Spindles */}
-      <mesh geometry={UNIT_CYLINDER} material={strutMaterial} scale={[r * 0.9, size * 0.96, r * 0.9]} />
-      <mesh
-        geometry={UNIT_CYLINDER}
-        material={strutMaterial}
-        rotation={[0, 0, Math.PI / 2]}
-        scale={[r * 0.9, size * 0.96, r * 0.9]}
-      />
-      <mesh
-        geometry={UNIT_CYLINDER}
-        material={strutMaterial}
-        rotation={[Math.PI / 2, 0, 0]}
-        scale={[r * 0.9, size * 0.96, r * 0.9]}
-      />
+      <mesh geometry={UNIT_CYLINDER} scale={[r, size * 0.96, r]}>
+        <meshBasicMaterial color="#FFFFFF" transparent opacity={0.85} blending={THREE.AdditiveBlending} depthWrite={false} />
+      </mesh>
+      <mesh geometry={UNIT_CYLINDER} rotation={[0, 0, Math.PI / 2]} scale={[r, size * 0.96, r]}>
+        <meshBasicMaterial color="#FFFFFF" transparent opacity={0.85} blending={THREE.AdditiveBlending} depthWrite={false} />
+      </mesh>
+      <mesh geometry={UNIT_CYLINDER} rotation={[Math.PI / 2, 0, 0]} scale={[r, size * 0.96, r]}>
+        <meshBasicMaterial color="#FFFFFF" transparent opacity={0.85} blending={THREE.AdditiveBlending} depthWrite={false} />
+      </mesh>
+
+      {/* Glowing White Vertex Nodes at Cube Corners & Face Centers */}
+      {VERTEX_OFFSETS.map(([vx, vy, vz], idx) => (
+        <mesh
+          key={idx}
+          geometry={UNIT_SPHERE}
+          scale={size * 0.024}
+          position={[vx * size, vy * size, vz * size]}
+        >
+          <meshBasicMaterial
+            color="#FFFFFF"
+            transparent
+            opacity={0.95}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
     </group>
   );
 });
 
 /**
- * Clean brushed-silver socket mount underneath each crystal
+ * Multi-stepped Brushed Metal & Glass Socket Pedestal matching the reference image
  */
 const PedestalSocket: React.FC<{
   size: number;
   glowColor: string;
-}> = React.memo(({ size, glowColor }) => {
-  const baseWidth = size * 1.18;
-  const collarWidth = size * 1.04;
-  const pinOffset = baseWidth * 0.45;
+  isOptimizer: boolean;
+}> = React.memo(({ size, glowColor, isOptimizer }) => {
+  const outerPlate = size * 1.26;
+  const midCollar = size * 1.08;
+  const pinOffset = outerPlate * 0.44;
 
   return (
     <group position={[0, -size / 2, 0]}>
-      {/* Upper silver-slate collar */}
+      {/* Upper Recessed Dark-Chrome Socket Lip */}
       <mesh
         geometry={UNIT_BOX}
-        scale={[collarWidth, 0.06, collarWidth]}
-        position={[0, -0.02, 0]}
+        scale={[midCollar, 0.08, midCollar]}
+        position={[0, -0.03, 0]}
+        castShadow
+        receiveShadow
       >
-        <meshStandardMaterial color="#64748B" metalness={0.6} roughness={0.25} />
+        <meshStandardMaterial color="#475569" metalness={0.78} roughness={0.2} />
+        <Edges scale={1} threshold={15} color="#CBD5E1" />
       </mesh>
 
-      {/* Soft upward base light reflection pad */}
+      {/* Intense Upward Under-Lit Crystal Glow Pad */}
       <mesh
         geometry={UNIT_PLANE}
-        scale={[size * 0.96, size * 0.96, 1]}
+        scale={[size * 0.98, size * 0.98, 1]}
         position={[0, 0.015, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
       >
         <meshBasicMaterial
           color={glowColor}
           transparent
-          opacity={0.75}
+          opacity={isOptimizer ? 0.95 : 0.8}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <mesh
+        geometry={UNIT_PLANE}
+        scale={[size * 0.65, size * 0.65, 1]}
+        position={[0, 0.018, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <meshBasicMaterial
+          color="#FFFFFF"
+          transparent
+          opacity={0.9}
           blending={THREE.AdditiveBlending}
         />
       </mesh>
 
-      {/* Lower brushed aluminum plate */}
+      {/* Lower Brushed-Aluminum Plinth Base */}
       <mesh
         geometry={UNIT_BOX}
-        scale={[baseWidth, 0.08, baseWidth]}
-        position={[0, -0.08, 0]}
+        scale={[outerPlate, 0.11, outerPlate]}
+        position={[0, -0.11, 0]}
+        castShadow
+        receiveShadow
       >
-        <meshStandardMaterial color="#CBD5E1" metalness={0.5} roughness={0.25} />
+        <meshStandardMaterial color="#94A3B8" metalness={0.65} roughness={0.22} />
+        <Edges scale={1} threshold={15} color="#F1F5F9" />
       </mesh>
 
-      {/* 4 Corner Pins */}
+      {/* 4 Machined Chrome Corner Retention Pins with Glowing Tips */}
       {[
         [-pinOffset, -pinOffset],
         [pinOffset, -pinOffset],
         [-pinOffset, pinOffset],
         [pinOffset, pinOffset],
       ].map(([cx, cz], idx) => (
-        <mesh
-          key={idx}
-          geometry={UNIT_CYLINDER}
-          scale={[0.028, 0.12, 0.028]}
-          position={[cx, 0.01, cz]}
-        >
-          <meshStandardMaterial color="#94A3B8" metalness={0.8} roughness={0.2} />
-        </mesh>
+        <group key={idx} position={[cx, -0.01, cz]}>
+          <mesh geometry={UNIT_CYLINDER} scale={[0.032, 0.14, 0.032]}>
+            <meshStandardMaterial color="#64748B" metalness={0.85} roughness={0.15} />
+          </mesh>
+          <mesh geometry={UNIT_SPHERE} scale={0.025} position={[0, 0.075, 0]}>
+            <meshBasicMaterial color="#FFFFFF" />
+          </mesh>
+        </group>
       ))}
     </group>
   );
@@ -166,9 +236,9 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
   const [isHovered, setIsHovered] = useState(false);
 
   const isOptimizer = candidate.nodeRole === 'optimizer';
-  const size = isOptimizer ? 1.55 : 0.94;
+  const size = isOptimizer ? 1.56 : 0.95;
 
-  // Match the exact airy pastel colors of the reference image
+  // Match the exact translucent crystal palette of the reference image
   const palette = useMemo(() => {
     const nameLower = (candidate.name || '').toLowerCase();
     const idLower = (candidate.id || '').toLowerCase();
@@ -176,23 +246,25 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
     if (isOptimizer || nameLower.includes('optimizer')) {
       return {
         shellTint: '#DDD6FE',
-        innerFacet: '#A78BFA',
-        edge: '#F5F3FF',
+        innerOcta: '#7C3AED',
+        edge: '#FFFFFF',
+        faceDiag: '#DDD6FE',
         glow: '#8B5CF6',
-        shellOpacity: 0.24,
+        shellOpacity: 0.26,
       };
     }
-    // Candidate B in reference is clear diamond/silver-white (NOT solid red)
+    // Candidate B: Clear Silver-Diamond Glass
     if (idLower.includes('cand-b') || nameLower.includes('candidate b')) {
       return {
         shellTint: '#F1F5F9',
-        innerFacet: '#CBD5E1',
+        innerOcta: '#64748B',
         edge: '#FFFFFF',
+        faceDiag: '#E2E8F0',
         glow: '#94A3B8',
-        shellOpacity: 0.2,
+        shellOpacity: 0.22,
       };
     }
-    // Candidate C & Evaluation Engine in reference are soft mint-aqua
+    // Candidate C & Evaluation Engine: Emerald/Aqua Mint Glass
     if (
       idLower.includes('cand-c') ||
       nameLower.includes('candidate c') ||
@@ -200,62 +272,64 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
     ) {
       return {
         shellTint: '#A7F3D0',
-        innerFacet: '#34D399',
+        innerOcta: '#059669',
         edge: '#ECFDF5',
+        faceDiag: '#6EE7B7',
         glow: '#10B981',
-        shellOpacity: 0.22,
+        shellOpacity: 0.24,
       };
     }
-    // Candidate A & Model Runtime in reference are ice-blue
+    // Candidate A & Model Runtime: Sapphire/Ice-Blue Glass
     return {
       shellTint: '#BAE6FD',
-      innerFacet: '#60A5FA',
+      innerOcta: '#2563EB',
       edge: '#EFF6FF',
+      faceDiag: '#93C5FD',
       glow: '#3B82F6',
-      shellOpacity: 0.23,
+      shellOpacity: 0.25,
     };
   }, [candidate.id, candidate.name, isOptimizer]);
 
-  // Compute non-overlapping label placement matching the reference image layout
+  // Non-overlapping radial callout positions matching the reference image
   const labelPlacement = useMemo(() => {
     const nameLower = (candidate.name || '').toLowerCase();
     if (isOptimizer || nameLower.includes('optimizer')) {
-      return { pos: [0, size * 0.72, 0] as [number, number, number], align: 'top' };
+      return [0, size * 0.72, 0] as [number, number, number];
     }
     if (nameLower.includes('candidate a')) {
-      return { pos: [-size * 0.7, size * 0.45, -size * 0.3] as [number, number, number], align: 'left' };
+      return [-size * 0.75, size * 0.48, -size * 0.25] as [number, number, number];
     }
     if (nameLower.includes('candidate b')) {
-      return { pos: [-size * 0.75, size * 0.4, size * 0.2] as [number, number, number], align: 'left' };
+      return [-size * 0.8, size * 0.42, size * 0.2] as [number, number, number];
     }
     if (nameLower.includes('candidate c')) {
-      return { pos: [size * 0.75, -size * 0.05, size * 0.4] as [number, number, number], align: 'right' };
+      return [size * 0.85, -size * 0.05, size * 0.35] as [number, number, number];
     }
     if (nameLower.includes('evaluation')) {
-      return { pos: [size * 0.8, size * 0.2, 0] as [number, number, number], align: 'right' };
+      return [size * 0.88, size * 0.22, 0] as [number, number, number];
     }
     if (nameLower.includes('runtime')) {
-      return { pos: [size * 0.75, size * 0.35, -size * 0.2] as [number, number, number], align: 'right' };
+      return [size * 0.82, size * 0.38, -size * 0.2] as [number, number, number];
     }
-    return { pos: [0, size * 0.7, 0] as [number, number, number], align: 'top' };
+    return [0, size * 0.7, 0] as [number, number, number];
   }, [candidate.name, isOptimizer, size]);
 
   useFrame((state, delta) => {
     if (innerCoreRef.current) {
-      innerCoreRef.current.rotation.y += delta * (isOptimizer ? 0.35 : 0.2);
+      innerCoreRef.current.rotation.y += delta * (isOptimizer ? 0.32 : 0.18);
     }
     if (crystalGroupRef.current && (isSelected || isOptimizer)) {
       crystalGroupRef.current.position.y =
-        Math.sin(state.clock.elapsedTime * 2.0) * 0.025;
+        Math.sin(state.clock.elapsedTime * 2.0) * 0.022;
     }
   });
 
   return (
     <group position={candidate.position3D}>
-      {/* Brushed-Silver Socket Pedestal */}
-      <PedestalSocket size={size} glowColor={palette.glow} />
+      {/* Multi-Stepped Metallic Socket Base */}
+      <PedestalSocket size={size} glowColor={palette.glow} isOptimizer={isOptimizer} />
 
-      {/* Interactive Crystal Cube */}
+      {/* Faceted Crystalline Cube Assembly */}
       <group
         ref={crystalGroupRef}
         scale={isHovered ? 1.05 : 1.0}
@@ -273,48 +347,75 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
           document.body.style.cursor = 'default';
         }}
       >
-        {/* 1. Outer Translucent Glass Cube (No opaque transmission bottleneck) */}
+        {/* 1. Outer Refractive Glass Cube */}
         <mesh geometry={UNIT_BOX} scale={[size, size, size]}>
           <meshPhysicalMaterial
             color={palette.shellTint}
             transparent
             opacity={palette.shellOpacity}
-            roughness={0.05}
-            metalness={0.05}
-            reflectivity={0.9}
+            roughness={0.04}
+            metalness={0.08}
+            reflectivity={0.95}
             clearcoat={1.0}
-            clearcoatRoughness={0.05}
+            clearcoatRoughness={0.04}
             depthWrite={false}
             side={THREE.DoubleSide}
           />
-          {/* Crisp White/Pastel Outer Cube Wireframe Edges */}
+          {/* Crisp Outer Cube Edges */}
           <Edges scale={1.001} threshold={15} color={palette.edge} />
         </mesh>
 
-        {/* 2. Inner Faceted Diamond Chamber (Creates the multi-faceted prism look) */}
-        <mesh geometry={UNIT_OCTA} scale={size * 0.68}>
-          <meshPhysicalMaterial
-            color={palette.innerFacet}
+        {/* 2. Etched X-Diagonals Across All 6 Outer Cube Faces (Signature Reference Detail) */}
+        <lineSegments
+          geometry={CUBE_FACE_DIAGONALS_GEO}
+          scale={[size * 1.002, size * 1.002, size * 1.002]}
+        >
+          <lineBasicMaterial
+            color={palette.faceDiag}
             transparent
-            opacity={0.28}
-            roughness={0.08}
+            opacity={0.75}
+            blending={THREE.AdditiveBlending}
+          />
+        </lineSegments>
+
+        {/* 3. Inscribed Inner Octahedron / Cuboctahedron Faceted Glass Chamber */}
+        {/* Scaled to size * 0.707 (1/sqrt(2)) so its 6 vertices touch the exact centers of the cube faces */}
+        <mesh geometry={UNIT_OCTA} scale={size * 0.7}>
+          <meshPhysicalMaterial
+            color={palette.innerOcta}
+            transparent
+            opacity={0.34}
+            roughness={0.06}
+            metalness={0.1}
             clearcoat={1}
             depthWrite={false}
-            blending={THREE.AdditiveBlending}
+            side={THREE.DoubleSide}
           />
           <Edges scale={1.0} threshold={10} color="#FFFFFF" />
         </mesh>
 
-        {/* 3. Glowing White & Pastel Internal X-Lattice Struts */}
-        <InternalLatticeStruts size={size} glowColor={palette.glow} />
+        {/* 4. Secondary Inner Faceted Prism (Rotated 45 deg for multi-layered refraction look) */}
+        <mesh geometry={UNIT_OCTA} scale={size * 0.52} rotation={[0, Math.PI / 4, 0]}>
+          <meshBasicMaterial
+            color={palette.glow}
+            transparent
+            opacity={0.28}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+          <Edges scale={1.0} threshold={10} color={palette.faceDiag} />
+        </mesh>
 
-        {/* 4. Rotating Bright Diamond Energy Core */}
+        {/* 5. Internal Space-Diagonal Struts & Glowing Vertex Dots */}
+        <InternalLatticeStructure size={size} glowColor={palette.glow} />
+
+        {/* 6. Rotating Central Radiant Diamond Core */}
         <group ref={innerCoreRef}>
-          <mesh geometry={UNIT_OCTA} scale={size * 0.22}>
+          <mesh geometry={UNIT_OCTA} scale={size * 0.24}>
             <meshBasicMaterial
               color="#FFFFFF"
               transparent
-              opacity={0.95}
+              opacity={0.98}
               blending={THREE.AdditiveBlending}
             />
           </mesh>
@@ -323,28 +424,17 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
               color={palette.glow}
               wireframe
               transparent
-              opacity={0.75}
+              opacity={0.85}
               blending={THREE.AdditiveBlending}
             />
           </mesh>
         </group>
-
-        {/* Soft Volumetric Glow Sprite inside the cube */}
-        <mesh geometry={UNIT_OCTA} scale={size * 0.5}>
-          <meshBasicMaterial
-            color={palette.glow}
-            transparent
-            opacity={isOptimizer ? 0.32 : 0.22}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-          />
-        </mesh>
       </group>
 
-      {/* Compact Non-Overlapping Callout Badge Matching Reference */}
+      {/* Architectural Callout Badge with Subtle Pin */}
       {(candidate.subLabel || isSelected || isHovered || isOptimizer) && (
         <Html
-          position={labelPlacement.pos}
+          position={labelPlacement}
           center
           zIndexRange={[50, 0]}
           style={{ pointerEvents: 'none' }}
@@ -355,18 +445,18 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
               onSelect(candidate.id);
             }}
             style={{ pointerEvents: 'auto' }}
-            className={`cursor-pointer whitespace-nowrap px-2.5 py-1 rounded-lg border text-left transition-all duration-150 select-none backdrop-blur-md ${isSelected || isOptimizer
-                ? 'bg-white/95 border-[#8174F5]/50 shadow-[0_4px_14px_rgba(129,116,245,0.18)]'
+            className={`cursor-pointer whitespace-nowrap px-3 py-1.5 rounded-xl border text-left transition-all duration-150 select-none backdrop-blur-md ${isSelected || isOptimizer
+                ? 'bg-white/95 border-[#8174F5]/40 shadow-[0_6px_20px_rgba(129,116,245,0.18)]'
                 : isHovered
                   ? 'bg-white/95 border-slate-300 shadow-md scale-105'
-                  : 'bg-white/85 border-slate-200/80 shadow-sm'
+                  : 'bg-white/90 border-white shadow-[0_4px_14px_rgba(15,23,42,0.07)]'
               }`}
           >
-            <div className="text-[11px] font-bold text-[#1E293B] leading-tight">
+            <div className="text-[11.5px] font-bold text-[#18213B] leading-tight">
               {candidate.name}
             </div>
             {candidate.subLabel && (
-              <div className="text-[9.5px] text-slate-500 font-medium leading-tight">
+              <div className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">
                 {candidate.subLabel}
               </div>
             )}
