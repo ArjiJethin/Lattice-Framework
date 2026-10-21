@@ -2,8 +2,8 @@
 
 Lattice is an optimization and experimentation framework designed for local LLM inference, benchmarking, and runtime configuration profiling.
 
-> **Status: Phase 0 Completed (Project Scaffolding & Environment Setup)**  
-> Application business logic, inference orchestration, UI dashboards, and optimization algorithms are scheduled for subsequent implementation phases.
+> **Status: backend vertical slice implemented (Sections 4–6).**
+> SQLite persistence, the versioned FastAPI API, bounded job orchestration, hardware-aware benchmarking, deterministic optimization decisions and test-only end-to-end verification are in place. Real llama.cpp execution is optional and has not been exercised here; UI dashboards remain future work. See [Backend/README.md](Backend/README.md) and [docs/implementation-decisions.md](docs/implementation-decisions.md).
 
 ---
 
@@ -41,11 +41,16 @@ Lattice/
 ├── .gitignore                          # Git ignore rules across languages
 ├── .editorconfig                       # Coding style formatting rules
 ├── docs/                               # Architecture and developer documentation
-│   ├── architecture.md                 # System boundaries and layer descriptions
+│   ├── architecture.md                 # Backend layers, persistence and flows
+│   ├── api.md                          # Endpoint reference and curl examples
+│   ├── benchmarking.md                 # Protocol, metrics, statistics, provenance
+│   ├── hardware-detection.md           # Collectors, availability states, preflight
+│   ├── implementation-decisions.md     # Decisions, deviations, known limitations
+│   ├── handoff.md                      # Teammate ownership and contracts
 │   ├── setup-windows.md                # Windows prerequisite setup guide
 │   └── development-workflow.md         # Daily development workflows and commands
 │
-├── frontend/                           # React + Vite + Tauri frontend
+├── Frontend/                           # React + Vite + Tauri frontend
 │   ├── package.json                    # Node dependencies and scripts
 │   ├── package-lock.json               # Deterministic lockfile
 │   ├── index.html                      # HTML entry point
@@ -73,20 +78,26 @@ Lattice/
 │       └── src/
 │           └── main.rs                 # Native desktop application entry
 │
-├── backend/                            # Python FastAPI service
-│   ├── pyproject.toml                  # Backend project metadata, Ruff and Pytest configs
-│   ├── requirements.txt                # Pinned dependency listing
-│   ├── .env.example                    # Backend environment template
+├── Backend/                            # Python FastAPI service
+│   ├── pyproject.toml                  # Project metadata, Ruff and Pytest configs
+│   ├── requirements.txt                # CPU-only dependency listing
+│   ├── .env.example                    # Environment template (all settings)
+│   ├── alembic/                        # Optional explicit migrations
+│   ├── scripts/smoke_fake_runtime.py   # Test-only end-to-end smoke test
 │   ├── app/                            # Backend source code
-│   │   ├── __init__.py                 # Package declaration
-│   │   ├── main.py                     # FastAPI application entry and health check
-│   │   ├── api/                        # HTTP routes and routers (reserved)
-│   │   ├── core/                       # Core configuration and security (reserved)
-│   │   ├── schemas/                    # Pydantic data schemas (reserved)
-│   │   ├── services/                   # Business and orchestration logic (reserved)
-│   │   ├── repositories/               # Storage and data persistence (reserved)
-│   │   └── runtime/                    # Inference runtime bindings (reserved)
-│   └── tests/                          # Backend test suite
+│   │   ├── main.py                     # App factory, middleware, lifespan
+│   │   ├── api/                        # /api/v1 routes, deps, error handlers
+│   │   ├── core/                       # Settings, container, errors, validation
+│   │   ├── db/                         # SQLAlchemy models and session lifecycle
+│   │   ├── repositories/               # Persistence queries
+│   │   ├── services/                   # Orchestration and business rules
+│   │   ├── jobs/                       # Bounded in-process job manager
+│   │   ├── runtime/                    # Runtime contract, llama.cpp, test fake
+│   │   ├── hardware/                   # Collectors, telemetry, preflight
+│   │   ├── benchmarking/               # Protocol, metrics, statistics, quality
+│   │   ├── optimization/               # Pure optimizer contract + baseline
+│   │   └── schemas/                    # Pydantic API schemas
+│   └── tests/                          # Unit, DB, API and end-to-end tests
 │
 ├── experiments/                        # Experiment artifacts
 │   ├── workloads/                      # Benchmark input definitions
@@ -116,19 +127,23 @@ For detailed step-by-step installation on Windows, consult [docs/setup-windows.m
 
 ### 1. Frontend Setup
 ```powershell
-cd frontend
+cd Frontend
 npm install
 npm run build
 ```
 
 ### 2. Backend Setup
 ```powershell
-cd backend
+cd Backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-pytest
+Copy-Item .env.example .env
+pytest -q
 ```
+
+Full backend setup, migrations and the test-only smoke test are in
+[Backend/README.md](Backend/README.md).
 
 ### 3. Running Development Servers
 Use the helper script from the repository root:
@@ -150,7 +165,16 @@ Use the helper script from the repository root:
 
 ## Current Phase and Limitations
 
-- **Phase**: Phase 0 (Scaffolding and Verification).
-- **Frontend**: Contains minimal buildable starter code with complete styling and library prerequisites installed.
-- **Backend**: Implements only a minimal server verification endpoint (`/health`).
-- **Models & Inference**: No local model weights, llama.cpp bindings, or benchmark suites are packaged yet.
+- **Frontend**: Minimal buildable starter; API dashboards are not implemented yet.
+- **Backend**: Persistence, configurations/workloads, bounded jobs, benchmarking,
+  history/import/export, deterministic optimization and inference orchestration
+  are implemented and covered by tests.
+- **Models & Inference**: No model weights are packaged or downloaded. The real
+  llama.cpp adapter is optional (`llama-cpp-python`); it is implemented but was
+  not exercised in this environment. Fake-runtime runs are test-only and are
+  never real model performance.
+- **Not implemented**: distributed queueing, auth/TLS, GPU telemetry beyond
+  NVIDIA best-effort, rich quality evaluators, adaptive research optimizers.
+
+See [docs/implementation-decisions.md](docs/implementation-decisions.md) for the
+full limitations list.

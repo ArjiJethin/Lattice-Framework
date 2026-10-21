@@ -1,82 +1,174 @@
-# Lattice Framework Architecture
+# Backend Architecture (Sections 4–6)
 
-This document outlines the high-level system boundaries and directory architecture planned for the Lattice Framework.
+Status: implemented and tested. Real model execution is not verified in this
+environment (see `docs/implementation-decisions.md`).
 
 ---
 
-## 1. System Separation & Boundaries
+## 1. Layering
 
-The Lattice Framework separates concerns across three primary components:
-
-```text
-┌────────────────────────────────────────────────────────┐
-│               Frontend Desktop Application             │
-│            (React + TypeScript + Vite + Tauri 2)       │
-│                                                        │
-│  - User Interface & Visualization Dashboards           │
-│  - ECharts Metrics Visualizations                      │
-│  - Native Windows Window Management (Tauri Shell)      │
-└───────────────────────────┬────────────────────────────┘
-                            │ HTTP / WebSocket Communication
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│                   Backend API Service                  │
-│                (FastAPI + Python 3.12)                 │
-│                                                        │
-│  - Experiment Scheduling & Workload Dispatch           │
-│  - Metric Aggregation & Optimization Engines           │
-│  - Persistence & Report Generation                     │
-└───────────────────────────┬────────────────────────────┘
-                            │ Process / C-FFI Bindings
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│               Local Inference Runtime                  │
-│         (llama.cpp / Native LLM Execution Engine)      │
-│                     (Planned)                          │
-│                                                        │
-│  - GGUF Quantized Model Execution                      │
-│  - Memory, Compute, & Context Window Profiling         │
-└────────────────────────────────────────────────────────┘
+```
+Backend/app/
+├── main.py                 app factory, CORS, request IDs, error handlers, lifespan
+├── core/
+│   ├── settings.py         single typed settings model (LATTICE_* env)
+│   ├── container.py        composition root + JobDispatcher
+│   ├── errors.py           domain errors -> HTTP status mapping
+│   ├── enums.py            status/objective/metric enums
+│   ├── validation.py       allowlists for runtime/generation parameters
+│   ├── paths.py            approved model-root resolution
+│   ├── time.py             UTC, monotonic clocks, IDs, hashing
+│   └── logging.py          request/correlation-safe logging
+├── api/
+│   ├── deps.py             FastAPI dependencies (session, services)
+│   ├── errors.py           error envelope handlers
+│   ├── router.py           /api/v1 assembly
+│   └── routes/             health, configurations, workloads, benchmarks,
+│                           optimization, inference, jobs, history
+├── schemas/                Pydantic request/response models (separate from ORM)
+├── db/
+│   ├── models.py           SQLAlchemy 2.0 ORM
+│   └── session.py          engine, session factory, PRAGMAs, session_scope
+├── repositories/           queries only (configurations, workloads, jobs,
+│                           benchmarks, decisions, inference)
+├── services/               orchestration + validation; no HTTP objects
+├── jobs/manager.py         bounded in-process worker queue
+├── runtime/                typed contract, llama.cpp adapter, fake adapter, locks
+├── hardware/               collectors, snapshot service, telemetry, preflight
+├── benchmarking/           protocol, metrics, statistics, quality, comparison
+└── optimization/           pure optimizer contract + deterministic baseline
 ```
 
-### Desktop Shell & Frontend (`frontend/`)
-- Encapsulates the UI presentation layer using React 18, Vite, and Tailwind CSS.
-- Integrates Apache ECharts via `echarts-for-react` for rendering metrics and execution profiles.
-- Wrapped by Tauri 2 (`frontend/src-tauri`), which provides a native lightweight desktop window container on Windows without the overhead of Chromium.
+Rules enforced by review/tests: routes call services only; repositories never
+invoke runtimes; the optimizer never touches the database; benchmark code
+persists through `BenchmarkService`; no session is held across model work.
 
-### Backend Application Service (`backend/`)
-- Implemented as a high-performance Python asynchronous service using FastAPI and Uvicorn.
-- Coordinates experiments, manages configuration schemas via Pydantic, and handles data validation.
-- Decoupled from the desktop frontend via a standardized REST API interface, enabling both embedded execution and headless/remote deployment modes.
+## 2. Request path
 
-### Local Inference Engine (`models/` & `backend/app/runtime/`)
-- Dedicated layer for interfacing with local LLMs (e.g., llama.cpp / GGUF model formats).
-- Models reside outside Git version control in `models/`.
-- During Phase 0, this runtime layer remains empty and uninstantiated.
+```
+HTTP request
+  → RequestIDMiddleware (X-Request-ID)
+  → route (validated Pydantic body/query)
+  → Depends(get_container) / get_db_session
+  → service method
+  → repository/ORM (commit or rollback)
+  → Pydantic response model
+  → exception handler (DomainError → stable code/status, request_id)
+```
 
----
+`DatabaseSession` yields one `Session` per request and closes it; writes are
+committed by the service. Long-running endpoints only persist `queued` rows then
+return `202`.
 
-## 2. Directory Responsibilities
+## 3. Composition and lifecycle
 
-| Directory | Purpose |
-| :--- | :--- |
-| `frontend/` | Web frontend and Tauri 2 native desktop shell codebases. |
-| `frontend/src/components/` | Reusable UI design system and atomic components. |
-| `frontend/src/pages/` | Main application view pages (experiments, metrics, settings). |
-| `frontend/src/hooks/` | Custom stateful React hooks for API queries and state. |
-| `frontend/src/lib/` | Shared utilities, formatting helpers, and class mergers. |
-| `frontend/src/types/` | TypeScript interfaces and type definitions matching backend schemas. |
-| `frontend/src/styles/` | Global CSS styling, Tailwind configuration, and CSS variables. |
-| `frontend/src-tauri/` | Rust source, configuration, and capabilities for the Tauri desktop shell. |
-| `backend/` | Python FastAPI backend application, dependencies, and tests. |
-| `backend/app/api/` | HTTP routers and endpoint handlers. |
-| `backend/app/core/` | Application configuration, environment settings, and logging. |
-| `backend/app/schemas/` | Pydantic validation models for input/output payloads. |
-| `backend/app/services/` | Business logic, optimization algorithms, and benchmark orchestrators. |
-| `backend/app/repositories/`| Database access and persistence layers. |
-| `backend/app/runtime/` | Inference engine adapters and execution bindings. |
-| `backend/tests/` | Unit and integration tests for API endpoints and algorithms. |
-| `experiments/` | Storage for experiment workloads, raw benchmark results, and output reports. |
-| `models/` | Local directory reserved for model weights and GGUF checkpoints (Git-ignored). |
-| `scripts/` | Automation and development convenience scripts. |
-| `docs/` | System architecture, setup instructions, and developer documentation. |
+`Container` builds settings → engine/session factory → optional schema creation →
+runtime registry → hardware service → quality registry → optimizer → lock
+manager → `JobManager`. `app.main.create_app()` wires lifespan startup
+(runtime probes, interrupted-job recovery) and shutdown (graceful worker drain).
+
+Tests construct the same graph with injected `RuntimeRegistry(FakeRuntimeAdapter)`,
+fake hardware/quality services and a temporary SQLite URL via `tests/conftest.py`.
+
+## 4. Persistence
+
+| Table | Purpose | Key invariants |
+| --- | --- | --- |
+| `configurations` | profile + current state | unique name, revision, soft-delete (`deleted_at`) |
+| `configuration_revisions` | immutable snapshots | append-only per revision |
+| `workloads` | workload profile | version, content hash, soft-delete |
+| `workload_revisions` | immutable snapshots | append-only per version |
+| `jobs` | lifecycle | status transitions, terminal immutability, resource link |
+| `benchmark_runs` | run metadata | snapshots/hash, hardware, model identity, counts, test_only |
+| `benchmark_measurements` | one row per warmup/measured repetition | raw timings, status, errors |
+| `benchmark_metric_summaries` | aggregated metrics | count/mean/median/min/max/stddev/p90/p95/status |
+| `optimization_decisions` | decision inputs/results | immutable history, selected config nullable |
+| `decision_candidates` | per-candidate feasibility | constraint outcomes, score, rejection reasons |
+| `inference_executions` | runtime execution | optional decision link, retention policy |
+
+Relationships: `Job 1—N BenchmarkRun`; `BenchmarkRun 1—N measurements` and
+`1—N metric summaries`; `OptimizationDecision 1—N decision candidates`;
+configurations/workloads are referenced **by ID + snapshot**, not by mutable
+foreign keys into history. SQLite foreign keys are enabled on every connection;
+deleting a referenced configuration/workload soft-deletes it, otherwise the row
+is hard-deleted.
+
+## 5. Job lifecycle
+
+```
+queued ──► running ──► completed
+   │          ├──────► failed
+   │          └──────► cancelled   (only before work starts)
+   └──────────────────► failed / interrupted
+```
+
+- Persistent row is created before scheduling.
+- Atomic `UPDATE ... WHERE status IN (...)` transitions in `services/jobs.py`.
+- Bounded queue (`job_max_workers`, `job_max_pending`); overload → `503`.
+- Worker catches all exceptions, stores `error_code`/sanitized `error_message`,
+  and always releases runtime locks in `finally`.
+- `progress` stays `null` when not measurable.
+- Startup recovery marks abandoned `running` jobs `interrupted`; queued jobs are
+  not silently re-run.
+
+## 6. Runtime lifecycle
+
+```
+resolve(adapter) → capabilities() → validate(config)
+  → acquire runtime+model lock
+  → load(config) → ModelLoadResult (load_ms, effective execution mode)
+  → generate(request) (streaming optional) → GenerationResult
+  → unload() or keep in single-slot cache
+  → release lock
+```
+
+`BaseRuntimeAdapter` is the canonical contract. `LlamaCppRuntime` lazily imports
+`llama_cpp` and never shells out. `FakeRuntime` is test-only. Runtime metadata
+(adapter/version/backend/offload mode) flows into the run snapshot, never into
+unrelated endpoints.
+
+## 7. Benchmark flow
+
+1. Route validates schema → `BenchmarkService.provision()` validates profile,
+   runtime availability, protocol bounds, path, context; writes queued
+   `Job` + `BenchmarkRun` with snapshots, then `JobManager.submit()`.
+2. Worker resolves config/workload from the stored snapshot, captures hardware,
+   loads the model, runs warmups, then measured repetitions.
+3. `measurement.collect_measurement()` produces per-repetition metrics with
+   statuses/provenance; `BenchmarkService` persists each row immediately.
+4. On completion, `aggregate_measurements()` + `summarize_metric()` build
+   summaries (warmups excluded, failures counted), quality evaluator runs (if
+   declared), then run/job are finalized in one transaction.
+5. `/benchmarks/{id}` and `/measurements` read the persisted rows; comparisons
+   apply compatibility rules.
+
+## 8. Optimizer evidence flow
+
+```
+request (workload, candidates, constraints, objective, policy)
+  → resolve workload snapshot + configuration revisions
+  → collect compatible completed/partial runs (protocol, workload hash, freshness,
+    repetitions, test-only policy)
+  → BaselineOptimizer (pure): constraint gates → feasibility/unknown →
+    normalize objective over eligible candidates → rank with ID tie-break
+  → persist decision + per-candidate rows + evidence run IDs
+  → optional execute endpoint creates inference job for selected config
+```
+
+Fresh benchmarking is opt-in only and runs as a separate optimization job that
+provisions/executes candidate benchmarks sequentially, then finalizes the
+decision. No implicit benchmarking during a decision request.
+
+## 9. Hardware and provenance
+
+Every run/execution stores `hardware_snapshot` (per-field status/reason/method,
+collector reports), `runtime_metadata`, `software_versions`, `model_identity`,
+and protocol/config/workload snapshots. Comparison reads these fields; see
+`docs/hardware-detection.md` and `docs/benchmarking.md`.
+
+## 10. API and docs
+
+Canonical prefix `/api/v1`, health/readiness aliases at root. OpenAPI is
+generated from the same Pydantic models used at runtime. Error envelope and
+pagination are documented in `docs/api.md`; route aliases are listed in
+`docs/implementation-decisions.md` (D16).

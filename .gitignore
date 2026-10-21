@@ -46,6 +46,13 @@ pnpm-debug.log*
 *.sqlite
 *.sqlite3
 *.db
+*.db-wal
+*.db-shm
+Backend/data/
+
+# Generated benchmark output (never commit research artifacts)
+*.jsonl
+!experiments/reports/.gitkeep
 
 # Model weights and large artifacts
 models/*
@@ -60,6 +67,8 @@ models/*
 .DS_Store
 Thumbs.db
 Desktop.ini
+*.freebuff
+.freebuff
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json

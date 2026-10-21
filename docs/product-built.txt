@@ -1,0 +1,688 @@
+PRODUCT-BUILT: WHAT EXISTS IN THIS REPOSITORY TODAY
+====================================================
+
+Purpose: a single, self-contained description of every capability implemented so far in
+the Lattice-Framework backend, written so an assistant (or new team member) can understand
+the system without reading every source file first. All statements below were verified by
+running the code in this repository on 2026-10-21 (Windows, CPU-only, no GPU, no model files).
+
+Verification status at time of writing (updated after the post-build hardening pass):
+  - pytest: 122 passed, 1 skipped (Backend/tests; isolated temp SQLite; fake runtime only).
+    The single skip is the opt-in real-model test, which skips because neither
+    llama-cpp-python nor a local .gguf exists here.
+  - ruff check: All checks passed
+  - ruff format --check: 97 files already formatted
+  - End-to-end smoke test (scripts/smoke_fake_runtime.py): finished successfully (exit 0)
+  - Live HTTP verification: uvicorn served the real app; /health, /docs, /openapi.json and
+    /api/v1/capabilities returned 200 without any runtime installed; a full fake-runtime
+    flow (config -> validate -> workload -> benchmark -> job -> measurements -> decision ->
+    execute -> inference validation -> history -> JSONL export -> comparison) was executed
+    over HTTP with curl and again with PowerShell 5.1.
+  - Alembic: `upgrade head` on a fresh temp SQLite file created 11 app tables and
+    `current` reported cab7b3235e59 (head).
+  - NO real model benchmark was ever run (llama-cpp-python not installed here).
+
+
+0. HOW THE SYSTEM IS LAYERED
+-----------------------------
+The backend is a FastAPI application in Backend/ with strict layering:
+
+  app/main.py            Application factory (create_app), CORS, request-ID middleware,
+                         exception handlers, lifespan (startup recovery + shutdown),
+                         root aliases /health and /ready. Starts without GPU/runtime/models.
+  app/core/               Settings (pydantic-settings, env prefix LATTICE_), logging,
+                          typed errors, enums, UTC time helpers, ID/content-hash helpers,
+                          input validation, model-path policy, DI container.
+  app/db/                 SQLAlchemy 2.x models + one engine/session factory. SQLite.
+  app/repositories/       Pure persistence queries (configurations, workloads, jobs,
+                          benchmarks, decisions, inference). No business logic.
+  app/services/           Business orchestration: configurations, workloads, benchmarks,
+                          jobs, optimization, inference, history, comparison, import/export
+                          (io), immutable snapshots.
+  app/api/                Thin routes + DI + consistent error mapping (routes/, deps.py,
+                          errors.py, router.py under /api/v1).
+  app/runtime/            Typed runtime contract (base.py), real lazy llama.cpp adapter
+                          (llamacpp.py), TEST-ONLY fake (fake.py), adapter registry,
+                          per-model locks.
+  app/benchmarking/       Canonical protocol + metric catalogue, per-repetition measurement,
+                          statistics, quality evaluators.
+  app/hardware/           Best-effort collectors, snapshot service, resource preflight,
+                          in-run telemetry sampler.
+  app/optimization/       Pure optimizer contracts + deterministic baseline algorithm.
+  app/jobs/               Bounded in-process job manager (ThreadPoolExecutor).
+  tests/                  122 deterministic passing tests + 1 opt-in real-model skip
+                          (unit, DB, API, adapter-contract, integration, e2e).
+  alembic/                Migration config + initial schema revision.
+
+Rules that hold everywhere: routes never contain SQL; repositories never run benchmarks;
+benchmarking code never writes tables directly (service layer persists); the optimizer is
+pure (no DB access) and decisions are persisted by the optimization service; no handler
+holds a DB session/transaction while a benchmark or inference runs (each persistence step
+opens a short-lived session via session_scope).
+
+
+1. SETTINGS AND CONFIGURATION (app/core/settings.py)
+-----------------------------------------------------
+- Single typed Settings entry point; env prefix "LATTICE_", loaded from environment and
+  a .env file. No scattered os.getenv in business logic.
+- Key settings (defaults in Backend/.env.example, which documents every one of them):
+  * LATTICE_DATABASE_URL (default sqlite under Backend/data/), busy timeout, WAL mode,
+    LATTICE_AUTO_CREATE_SCHEMA=true (safe startup schema creation; never deletes data).
+  * LATTICE_MODEL_ROOTS (approved model directories) +
+    LATTICE_ALLOW_UNROOTED_MODEL_PATHS=false -> model paths are resolved against approved
+    roots; traversal and disallowed schemes are rejected; path layout is never mandated.
+  * LATTICE_RUNTIME_ADAPTER=auto, LATTICE_RUNTIME_ALLOW_FAKE=false (fake runtime is off
+    unless explicitly enabled), model cache size, default timeout.
+  * Jobs: LATTICE_JOB_MAX_WORKERS=1, LATTICE_JOB_MAX_PENDING=16, shutdown grace,
+    LATTICE_JOB_RECOVER_INTERRUPTED_ON_STARTUP=true.
+  * Benchmarks: default/max repetitions (3/20), warmups (default 1, max 5), default/max
+    timeout (120/900 s), continue-on-repetition-error policy.
+  * Safety limits: max prompt chars 16000, max output tokens 2048, max context 131072,
+    max threads/batch/gpu-layers.
+  * Hardware: memory sampling interval 50 ms, GPU telemetry on/off, collector timeout,
+    memory safety margin 0.15, preflight policy "advisory"|"strict".
+  * Evidence policy: max age 168 h, min successful repetitions 1, estimated metrics
+    disallowed in decisions by default, test-only evidence disallowed by default.
+  * Privacy: LATTICE_ALLOW_OUTPUT_RETENTION=false (prompts/outputs are NOT persisted by
+    default), max retained output chars.
+  * Pagination: default limit 50, max 200; max import records 500; JSONL export cap 1000 runs.
+
+
+2. PERSISTENCE (app/db/models.py, app/db/session.py, alembic/)
+---------------------------------------------------------------
+Engine/session:
+- One engine factory; SQLite PRAGMAs applied on every connection:
+  foreign_keys=ON, busy_timeout, journal_mode=WAL, synchronous=NORMAL.
+- session_scope() context manager: commit / rollback-on-exception / close.
+- verify_database() checks FK enforcement and is used by the /ready endpoint.
+- init_database() creates tables safely on startup (no destructive reset).
+
+Tables (11 application tables; 12 including alembic_version) and their purpose:
+  configurations            Profile: name (unique), model_id/version/format/quantization,
+                             model_path (hidden from public responses unless needed),
+                             context_length, runtime_parameters, generation_defaults,
+                             thread_count/batch_size/gpu_layers, enabled, validation_state
+                             + validation_summary, metadata_json, revision, deleted_at.
+  configuration_revisions    Immutable per-update snapshots with content_hash
+                             (unique config+revision) -> history survives later edits.
+  workloads                  Name (unique), workload_type (generation|completion|exact_match),
+                             input_spec (prompt/samples/expected outputs/stop), output token
+                             target/min/max, context_requirement, dataset_reference,
+                             protocol_reference, quality_evaluator, version, metadata,
+                             enabled, deleted_at.
+  workload_revisions         Immutable workload snapshots with content_hash.
+  jobs                       id, job_type (benchmark|inference|optimization), status
+                             (queued|running|completed|failed|cancelled|interrupted),
+                             progress (null when not measurable), resource_type/id,
+                             result_summary, error_code, error_message, attempt, request_id,
+                             created/started/finished timestamps.
+  benchmark_runs             job_id (FK RESTRICT), configuration_id, workload_id,
+                             protocol_version, snapshot_schema_version, immutable
+                             configuration_snapshot / workload_snapshot / protocol_snapshot +
+                             snapshot_hash, requested/completed/failed/warmup counts,
+                             runtime_metadata, model_identity, hardware_snapshot,
+                             software_versions, aggregate_summary, quality_result,
+                             feasibility_result, test_only flag, error code/message,
+                             created/started/finished/duration.
+  benchmark_measurements     One row per repetition/warmup: unique (run_id, sequence),
+                             repetition_index, kind (warmup|measured), status
+                             (completed|failed), start/finish, input/output tokens,
+                             token_count_source, ttft_ms, latency_ms, generation_duration_ms,
+                             time_per_output_token_ms, output_throughput_tps,
+                             peak_process_rss_mb, system_ram_used_mb,
+                             gpu_device_memory_used_mb, gpu_utilization_pct, metrics_json
+                             (per-metric {value, unit, status, method, reason, sample_count}),
+                             error code/message, runtime_metadata. Missing values are NULL,
+                             never 0.
+  benchmark_metric_summaries Per-run aggregates: unique (run_id, metric_name), unit, status,
+                             method, reason, sample_count, failed_count, invalid_count,
+                             mean/median/min/max/stddev/p90/p95 (all nullable).
+  optimization_decisions     workload_id + immutable workload_snapshot, constraint_spec,
+                             objective, weights, evidence_policy, candidate/feasible/
+                             evidence-run ID lists, selected_configuration_id (nullable),
+                             status (selected|no_feasible_candidate|insufficient_evidence|
+                             pending_evidence|failed), no_selection_reason, explanation,
+                             algorithm + version, switching_overhead_considered,
+                             duration_ms, execution_job_id, snapshot_schema_version.
+  decision_candidates        Per-candidate rows (unique decision+config): feasibility,
+                             rejection_reasons, constraint_results, objective_values,
+                             score_components, score, rank, evidence_run_ids, warnings.
+  inference_executions       job_id, configuration_id, optional decision_id, status,
+                             configuration_snapshot, generation_parameters,
+                             runtime/hardware snapshots, token counts + source, latency_ms,
+                             ttft_ms, throughput, peak RSS, metrics_json, validation_status,
+                             constraint_results, output_retention_policy (default "none"),
+                             retained_output (null unless explicitly retained),
+                             prompt_retained=false, test_only, error fields.
+
+Referential integrity: FKs use deliberate ON DELETE behavior (CASCADE for child rows like
+measurements/revisions/candidates, RESTRICT for historical references to configs/workloads/
+jobs, SET NULL for inference->decision), enforced by PRAGMA foreign_keys=ON on every
+connection. Soft-delete is used for configurations/workloads that have history (see 3).
+
+
+3. CONFIGURATION AND WORKLOAD MANAGEMENT
+----------------------------------------
+Configurations (app/services/configurations.py, routes/configurations.py):
+- POST /api/v1/configurations (201): validates name, format, quantization, context_length,
+  non-finite numbers, negative thread/batch/gpu-layer values, generation/runtime parameter
+  allowlists (rejects command-like keys), and model-path policy (approved roots, no
+  traversal, no disallowed URL schemes). Registration does NOT require the model file to
+  exist (readiness is checked before benchmark/inference).
+- GET /api/v1/configurations: paginated, stable ordering, filters (enabled, search).
+- GET /api/v1/configurations/{id}: detail; absolute model_path hidden from public response.
+- PATCH /api/v1/configurations/{id}: partial update with the same validation; bumps
+  revision and appends an immutable configuration_revisions snapshot (content hash).
+- DELETE /api/v1/configurations/{id}: hard delete when unreferenced; soft delete (enabled=false,
+  deleted_at set) when referenced by history or running work -> returns 200 with
+  deleted="soft" and an explanatory message. Historical snapshots stay interpretable.
+- POST /api/v1/configurations/{id}/validate: non-destructive checks (path policy, runtime
+  availability, parameter bounds, context vs hardware capability) -> returns a check list
+  with pass/fail/warning details, runtime adapter status, optional preflight section.
+  Does not load the model.
+- GET /api/v1/configurations/{id}/revisions: revision history with snapshot hashes.
+- Import/export: POST /api/v1/configurations/import (also alias POST /api/v1/import/
+  configurations) supports dry_run, conflict_policy error|skip|rename, per-record row-level
+  errors, allowlisted fields (imported records cannot overwrite IDs/timestamps/history),
+  size cap (500 records), and all-or-nothing behavior on malformed input. GET
+  /api/v1/configurations/export (alias GET /api/v1/export/configurations) returns a versioned
+  envelope (schema_version "lattice.configurations/1", exported_at, records) without model
+  paths unless explicitly requested.
+
+Workloads (app/services/workloads.py, routes/workloads.py):
+- POST /api/v1/workloads (201), GET list (paginated/filtered), GET/{id}, PATCH (bumps
+  workload version + revision snapshot), DELETE (soft when referenced by history).
+- Validation: prompt/sample size limits, expected-output/evaluator consistency, context and
+  token-range sanity, non-finite metadata. Workloads reference an evaluation protocol or
+  dataset manifest; arbitrary client file paths are never read.
+
+
+4. JOBS AND ORCHESTRATION (app/jobs/manager.py, app/services/jobs.py)
+---------------------------------------------------------------------
+- Bounded local in-process worker: ThreadPoolExecutor with LATTICE_JOB_MAX_WORKERS (default 1)
+  and a bounded pending queue LATTICE_JOB_MAX_PENDING (default 16). Submitting beyond capacity
+  raises CapacityError -> HTTP 503 (code "queue_capacity_exhausted"). No Redis/Celery;
+  no unbounded asyncio.create_task per request.
+- Job rows are persisted BEFORE scheduling (queued), then transitioned atomically:
+  allowed: queued->running|failed, running->completed|failed|cancelled, running->interrupted
+  on restart. Terminal states never transition back (assert_transition enforces this and it
+  is unit-tested). "cancelled" only for jobs that were not yet running (queued).
+- Worker boundary catches all exceptions, sanitizes them via safe_failure() into a concise
+  structured error_code + safe message (never stack traces/local paths/env values), persists
+  failure, and releases locks in finally. Long inference never holds a DB session.
+- Progress is null unless genuinely measurable (never timer-faked).
+- Cancellation: only queued jobs can be cancelled reliably (documented); cancelling a running
+  native inference is rejected with 409 (no false "cancellation succeeded" claims).
+- Restart recovery (startup, lifespan): queued/running jobs, runs and executions are marked
+  "interrupted" with error_code "interrupted_by_restart"; pending_evidence decisions are
+  marked failed. Work is never silently duplicated or resumed.
+- Per-model/per-runtime mutual exclusion: RuntimeLockManager gives each adapter/model key a
+  lock so concurrent loads cannot overlap unsafely.
+
+
+5. RUNTIME CONTRACT (app/runtime/)
+----------------------------------
+- Typed contract in base.py: capabilities(), validate(configuration), load(), unload(),
+  is_loaded(), generate(request) returning structured results (GenerationRequest/
+  GenerationResult with token counts, TTFT/first-token timestamp when streamed, backend/
+  offload metadata) and typed failures (ModelLoadFailure, OutOfMemoryFailure,
+  InferenceTimeout, InferenceFailure with stable codes like "runtime_unavailable").
+- LlamaCppAdapter (llamacpp.py): real adapter for llama-cpp-python, imported LAZILY. If the
+  package is missing, capabilities() reports available=false with a reason, API startup and
+  all non-runtime endpoints still work, and benchmark/inference requests return a controlled
+  503 "runtime_unavailable" (or 409 "benchmark_not_executable") - never a fabricated result.
+  Handles timeout, OOM detection, model close errors, and sanitizes error text (no paths).
+  It never downloads models and never shells out with client-derived commands.
+- FakeRuntimeAdapter (fake.py): TEST-ONLY, registered only when LATTICE_RUNTIME_ALLOW_FAKE=true.
+  Every run it produces is persisted with test_only=true, is reported in API responses as
+  test-only, is excluded from list endpoints and history export unless include_test_only is
+  explicitly requested, is rejected as optimizer evidence by default, and is flagged in
+  comparisons. Its timings are NOT real model performance.
+- RuntimeRegistry: adapter discovery, capability listing, auto-resolution (first installed,
+  non-test adapter), explicit error when nothing is available.
+- app/runtime/locks.py: per-key threading locks with acquire timeout for safe model loading.
+
+
+5a. ADAPTER CONTRACT AND HARDENING (added after the first build)
+----------------------------------------------------------------
+The real adapter is still optional and still unexercised against a real model, but its
+contract is now tested and one real defect was fixed.
+
+- DEFECT FIXED (P0): LlamaCppAdapter.capabilities() previously called
+  module.llama_supports_gpu_offload() without a guard. On a llama-cpp-python build where
+  that probe raises, /api/v1/capabilities, /api/v1/ready (runtime check) and adapter
+  resolution would fail instead of degrading. The probe is now wrapped: a failure logs a
+  warning, reports supports_gpu_offload=false, and appends the limitation
+  "the GPU capability probe raised an error; GPU offload is treated as unavailable".
+  Regression test: tests/test_llamacpp_adapter.py::test_capabilities_survive_a_failing_gpu_probe.
+- NEW: Backend/tests/test_llamacpp_adapter.py - 22 contract tests against a mocked
+  `llama_cpp` module (no package, no model, no network). They prove:
+    * capabilities: not-installed status/reason; version, GPU/acceleration reporting;
+      surviving a raising GPU probe.
+    * validate(): non-.gguf rejection, context_length < 1, negative gpu_layers; valid case.
+    * load(): exact kwarg mapping (model_path, n_ctx, n_threads, n_batch, n_gpu_layers,
+      verbose, runtime parameters); runtime_parameters cannot override core kwargs;
+      CPU vs HYBRID effective mode; warning when GPU offload is requested without GPU
+      build support; load duration > 0; runtime metadata marked is_test_runtime=false.
+    * load failures: OOM (out_of_memory) vs generic load failure (model_load_failed);
+      absolute model paths replaced with "<model>"; a failed load keeps the previously
+      loaded model intact.
+    * unload(): closes the model, clears is_loaded, is idempotent, tolerates a raising
+      native close().
+    * generate(): streamed text assembly, first-token timestamp, finish_reason, runtime
+      usage token counts, tokenizer fallback, null counts when neither source exists,
+      system-prompt prefixing, seed/stop mapping, model-not-loaded rejection, stream
+      failure translation with path sanitisation, timeout between chunks closing the
+      stream, and empty output that does not invent a first-token timestamp.
+  These are contract tests only: they do NOT prove real model behaviour or performance.
+- NEW: Backend/tests/test_llamacpp_integration.py - opt-in real-model test. It is skipped
+  unless llama-cpp-python is importable AND LATTICE_REAL_MODEL_PATH names an existing local
+  .gguf. It loads, generates a short reply, prints measured facts, unloads, and asserts
+  structural properties only (non-empty output, no fabricated token counts, is_test_runtime
+  false). Nothing is downloaded. In this environment it reports 1 skipped.
+- Explicitly unchanged: timeouts are only observed between streamed chunks (native decode is
+  not preemptible); cancellation remains unsupported and is reported as such; no model
+  metadata parsing was added to preflight.
+
+
+6. HEALTH, READINESS, CAPABILITIES
+-----------------------------------
+- GET /api/v1/health (alias GET /health): liveness only; no model/GPU/runtime needed.
+- GET /api/v1/ready (alias GET /ready): checks database (real PRAGMA check) and reports
+  runtime, job manager and optimizer separately. Returns 503 only if the database is
+  unusable; a missing runtime does NOT make the service unhealthy.
+- GET /api/v1/capabilities: runtime adapters with explicit status+reason, full hardware
+  snapshot, telemetry support matrix, the benchmark metric catalogue, quality evaluators,
+  protocol versions, feature flags (job bounds, output retention, test-runtime enabled...)
+  and an explicit limitations list (honest about fake runtime, desktop noise, device-wide
+  GPU telemetry, advisory preflight, queued-only cancellation).
+
+
+7. HARDWARE DETECTION (app/hardware/)
+--------------------------------------
+- HardwareService.snapshot(): best-effort, fast, non-fatal. Runs independent collectors -
+  SystemCollector (OS/arch/platform), CPUCollector (vendor/model, logical/physical cores),
+  MemoryCollector (total/available RAM, process RSS/peak RSS), GPUCollector - and builds a
+  snapshot with schema_version "lattice.hardware/1.0.0", per-field status, method, reason,
+  collector names/versions, and timestamp.
+- GPU collection is optional and guarded: prefers NVML (nvidia-ml-py, if installed), falls
+  back to the nvidia-smi CLI (if present) with a short timeout, otherwise status
+  not_installed/not_detected with a reason. Missing telemetry is NULL + reason, NEVER zero.
+  Distinguishes device-wide VRAM from process-attributed memory (records which is which).
+- Availability states modeled as an enum: available, unsupported, not_installed,
+  not_detected, permission_denied, temporarily_unavailable, not_applicable, collection_error.
+- HardwareService.telemetry_support() reports what can/cannot be measured on this machine.
+- classify_execution_mode(): requested mode (from gpu_layers) recorded separately from
+  effective mode (cpu|gpu|hybrid|unknown) based on runtime-reported offload metadata;
+  unknown when no evidence. GPU presence alone is never treated as GPU use.
+- ResourceMonitor (telemetry.py): background sampler (default 50 ms interval) capturing
+  process RSS, system RAM used and GPU memory/utilization peaks during a run; records the
+  sampling method/interval, notes that brief peaks may be missed, and that a post-run sample
+  is not a peak.
+- Preflight (preflight.py): before model load, validates context length/batch/threads/
+  offload params against runtime capability, checks model file existence/size without
+  loading it, computes a COARSE memory estimate (file_size x 1.2) explicitly labeled
+  status="estimated" with method/uncertainty, compares against available RAM with a
+  configurable safety margin (default 15%), and per policy "advisory" (default: warn and
+  allow a guarded attempt) or "strict" (reject). When no defensible estimate exists the
+  result is "unknown" - preflight is advisory; the actual load attempt is authoritative.
+  OOM/load failures/fallbacks are recorded honestly by the runtime and benchmark layers.
+- The entire layer works on a CPU-only machine with no collectors installed; tests cover
+  missing/throwing/permission-denied/partial collectors.
+
+
+8. BENCHMARKING SUBSYSTEM (app/benchmarking/, app/services/benchmarks.py)
+--------------------------------------------------------------------------
+This is a functioning engine, not a placeholder. One canonical protocol
+(PROTOCOL_VERSION "lattice.benchmark/1.0.0") and one canonical metric catalogue.
+
+Request validation (POST /api/v1/benchmarks):
+- Repetitions within configured bounds (default 3, max 20), warmups (default 1, max 5),
+  finite timeout > 0 and <= max, generation parameters validated (finite numbers, bounded
+  output tokens), workload context must fit the configuration's context length, protocol
+  version must match the supported one, runtime must be available. Invalid values return
+  422 with field-level errors BEFORE any job is created (never silently clamped).
+
+Execution lifecycle (BenchmarkService):
+1. Validate, resolve configuration + workload, capture immutable snapshots (config, workload,
+   protocol) with schema version + content hash BEFORE any work.
+2. Create persisted job + run rows (status queued), enqueue on the bounded worker -> API
+   returns 202 with job_id + benchmark_run_id immediately (non-blocking).
+3. Worker: acquire runtime lock, capture pre-run hardware/process baseline (fresh snapshot
+   attached to the run), load the model (load duration measured SEPARATELY from latency),
+   run warmups marked kind=warmup (excluded from all aggregates but preserved as raw rows),
+   then measured repetitions.
+4. Each repetition (monotonic perf_counter clock): records start/end, TTFT (only if the
+   runtime exposes a first-token/stream timestamp - otherwise status "unavailable" with
+   reason; TTFT is never fabricated), end-to-end latency (dispatch->generation finish,
+   successful reps only), token counts with provenance (token_count_source: runtime usage >
+   tokenizer > unavailable; never characters-as-tokens), derived time-per-output-token
+   (only when output_tokens > 0 - zero-token and failed reps cannot divide by zero or
+   produce fake throughput), throughput = output_tokens / latency seconds (documented as
+   including prefill), memory observations from the sampler with method+interval, runtime
+   status and sanitized errors. Failed repetitions are persisted as rows and never dropped.
+5. Finalize: aggregate successful measured repetitions only (count/failed/invalid reported),
+   evaluate quality via the declared evaluator (or mark unavailable), set run status
+   honestly: completed (all succeeded), partial (some failed, failures counted), failed
+   (none succeeded) - never marking a partial run successful. Persist aggregate_summary and
+   metric summary rows, release locks in finally. Timeouts/exceptions always leave a
+   terminal state (no permanently-"running" runs).
+
+Metrics (metric catalogue, all with unit + status + method):
+  ttft_ms (ms, measured only with first-token timestamps; else unavailable)
+  latency_ms (ms, measured, successful completions only)
+  generation_duration_ms (ms, same window as latency in this protocol - documented)
+  input_tokens / output_tokens (tokens, runtime count > tokenizer > unavailable)
+  time_per_output_token_ms (ms/token, derived; null when tokens=0)
+  output_throughput_tps (tokens/s, derived = output_tokens / end-to-end seconds)
+  decode_throughput_tps (tokens/s, derived = output_tokens / (latency - ttft) when TTFT measured)
+  peak_process_rss_mb (MB, sampled peak, method/interval recorded)
+  peak_system_ram_used_mb (MB, device-wide used RAM peak)
+  peak_gpu_device_memory_used_mb (MB, device-wide (NOT process) peak, only when a collector exists)
+  peak_gpu_utilization_pct (percent, device-wide, collector-gated)
+  model_load_ms (ms, measured separately from latency; cold load only)
+  quality_score (evaluator-defined; unavailable without an evaluator)
+Metric status enum everywhere: measured | derived | estimated | unavailable | failed |
+not_applicable. Missing is null + reason, never 0; NaN/Infinity rejected before persistence
+and JSON serialization.
+
+Statistics (app/benchmarking/statistics.py): count, mean, median, min, max, sample stddev
+(n>=2, else null), p90/p95 percentiles via linear interpolation R-7 (null unless n>=5,
+documented as limited for small samples), plus failed/invalid counts. Empty datasets yield
+all-null statistics with a reason - never a fabricated number. Warmups are never included.
+
+Quality (app/benchmarking/quality.py): pluggable evaluator interface + registry. Shipped
+evaluator: ExactMatchEvaluator (normalized exact match, metric exact_match_accuracy,
+records evaluator name/version, scale, sample count, failures). If no evaluator is declared
+for the workload/protocol, quality is "unavailable" (never a guessed score); evaluator
+errors are captured safely. No external LLM judge or paid API is needed.
+
+Run detail / measurements / comparison APIs:
+- GET /api/v1/benchmarks: paginated history with filters (configuration, workload, status,
+  date range; test-only runs excluded unless include_test_only=true).
+- GET /api/v1/benchmarks/{run_id}: status, snapshots, protocol + hardware snapshot + software
+  versions, requested vs completed vs failed counts, aggregate metrics with units/statuses,
+  quality, safe error details.
+- GET /api/v1/benchmarks/{run_id}/measurements: paginated RAW repetitions (warmup/measured
+  filter), with units, timestamps, provenance and per-rep failure info.
+- GET /api/v1/benchmarks/compare?run_ids=...: returns comparable: true|false, structured
+  warnings and blocking reasons. Blockers: differing workload/protocol snapshots, model
+  identity, relevant generation settings, metric collection methods. Warnings (non-blocking,
+  exposed not hidden): hardware differences, partial runs, test-only runs. Incompatible
+  measurements are never silently pooled.
+- POST /api/v1/benchmarks/{run_id}/cancel: cancels QUEUED jobs only (409 for running ones,
+  since native inference cannot be stopped reliably); marks the run cancelled with a reason.
+
+
+9. OPTIMIZATION (app/optimization/, app/services/optimization.py)
+------------------------------------------------------------------
+- Pure, deterministic baseline algorithm: name "baseline-feasibility-v1", version 1.0.0
+  (extensible interface for future Optuna/multi-objective work without requiring Optuna to
+  install or start).
+- Request: workload_id, candidate_configuration_ids (1..50, unique), hard constraints
+  (metric, operator <= | >= | ==, finite threshold, unit), objective
+  (minimize_latency | maximize_throughput | minimize_weighted_score), weights, evidence
+  policy (max age, min successful repetitions, require current workload snapshot, allow
+  estimated metrics, allow test-only evidence, allowed run statuses), optional
+  switching_overhead_ms, allow_fresh_benchmarking (default false).
+- Algorithm steps: (1) resolve compatible completed evidence per candidate (checks workload
+  snapshot hash, protocol version, model identity, runtime, hardware class, freshness,
+  repetition counts, test-only status); (2) evaluate each hard constraint independently as
+  pass/fail/unknown with per-constraint actual value/unit/status/reason; (3) any failing
+  constraint => infeasible regardless of score; required metric unknown/unavailable/stale
+  => insufficient_evidence (never treated as passing); (4) exclude both from ranking;
+  (5) normalize objective metrics deterministically; (6) apply direction; (7) ties broken
+  stably by configuration ID; (8) if nothing eligible: selected_configuration_id = null with
+  a precise no_selection_reason plus per-candidate explanations; (9) persist everything
+  (algorithm/version, inputs, evidence IDs, raw values, normalized components, scores,
+  ranks) - decisions are append-only, never overwritten.
+- Distinguishes "violates a constraint" (infeasible) from "not enough compatible evidence"
+  (insufficient_evidence) - machine-readable rejection reasons for every excluded candidate.
+- API:
+  * POST /api/v1/optimization/decisions (alias POST /api/v1/optimization):
+      -> 201 with a decision computed from existing compatible evidence, OR
+      -> 202 with a job when allow_fresh_benchmarking=true (fresh benchmarks are queued
+         ONLY when the installed runtime can genuinely run them; the decision stays
+         pending_evidence). Fresh benchmarking never happens silently during a decision.
+  * GET /api/v1/optimization/decisions (paginated, filter by workload/status)
+  * GET /api/v1/optimization/decisions/{id} (alias GET /api/v1/optimization/{id})
+  * POST /api/v1/optimization/decisions/{id}/execute -> 202, ONLY for status=selected with
+    a selected configuration; otherwise 409 "decision_not_executable". Creates an inference
+    job and links execution_job_id.
+- Quality-aware feasibility: a quality constraint with no evaluator/quality evidence yields
+  insufficient_evidence, never a pass. Test-only evidence is rejected by default.
+
+
+10. INFERENCE (app/services/inference.py, routes/inference.py)
+---------------------------------------------------------------
+- POST /api/v1/inference -> 202 with execution_id + job_id (asynchronous via the job
+  manager; no long work in the request handler).
+- Validates: prompt size limit, configuration exists/enabled, exactly one target
+  (configuration_id or decision_id), generation parameter bounds, timeout, retention policy.
+- Privacy by default: prompts are held in PROCESS MEMORY ONLY for hand-off to the worker and
+  are never written to the database; output_retention_policy="none" by default; retaining
+  output requires both a per-request opt-in AND server setting
+  LATTICE_ALLOW_OUTPUT_RETENTION=true, and is truncated to max_retained_output_chars.
+- Persists configuration snapshot, hardware snapshot, token counts with source, latency,
+  TTFT (when measurable), throughput, peak RSS, and - when the execution came from a
+  decision - validates the decision's hard constraints against the actual result
+  (validation_status: not_evaluated|passed|failed with per-constraint results).
+- Failures persist error_code/message (e.g. model unavailable, OOM) with full run provenance.
+- GET /api/v1/inference (paginated) and GET /api/v1/inference/{execution_id}.
+
+
+11. HISTORY AND EXPORT (app/services/history.py, routes/history.py)
+--------------------------------------------------------------------
+- GET /api/v1/history (alias /history/summary): counts, latest runs/decisions/executions,
+  latest metric aggregates with nulls + null_metric_reason for missing metrics.
+- GET /api/v1/history/compare: same compatibility engine as benchmark compare.
+- GET /api/v1/history/benchmarks/{run_id}: run + raw measurements + decisions referencing it.
+- GET /api/v1/history/decisions/{id}, GET /api/v1/history/inference/{id}.
+- GET /api/v1/history/configurations/{id}: compatible runs, decisions, inference executions.
+- GET /api/v1/history/export?format=jsonl: streaming JSONL (application/x-ndjson), one
+  independently parseable UTF-8 JSON object per line, with run ID, snapshots, metric
+  statuses/methods, raw repetitions, hardware snapshot, software versions, protocol,
+  quality metadata and decision references; filters (configuration, workload, run, dates);
+  excludes test-only by default; cap LATTICE_HISTORY_EXPORT_MAX_RUNS; no secrets/prompts.
+- Configuration JSON export/import covered in section 3.
+
+
+12. ERRORS, PAGINATION, CONVENTIONS
+------------------------------------
+- Consistent error envelope (app/api/errors.py) for every failure:
+    {"error": {"code": "...", "message": "...", "details": {...}}, "request_id": "..."}
+  Codes are stable strings: not_found (404), conflict (409), validation_error (422),
+  queue_capacity_exhausted (503), unsupported_operation (409), runtime_unavailable (503),
+  runtime_preflight_failed (422), model_unavailable (422), benchmark_not_executable (409),
+  decision_not_executable (409), internal_error (500) - plus request 422 field errors.
+  Messages are sanitized: no stack traces, no absolute local paths, no env values.
+- Request IDs: accepted via X-Request-ID or generated; set in logs and echoed on responses.
+- Pagination: list responses carry items, limit, offset, total (bounded by max limit 200).
+- Timestamps: UTC ISO-8601; IDs: UUID strings; Pydantic response models on all nontrivial
+  responses; OpenAPI at /docs (also /redoc, /openapi.json).
+- CORS configurable via LATTICE_CORS_ORIGINS.
+
+
+13. TESTS (Backend/tests/, 123 collected: 122 passing, 1 opt-in skip)
+---------------------------------------------------------------------
+All tests are deterministic, use temp SQLite databases + injected fakes (no GPU, no model
+files, no network, no machine-specific paths or timing thresholds):
+  test_main.py (2)             Fresh app import/startup without optional runtime/GPU deps;
+                               health/ready/capabilities in CPU-only environment.
+  test_database.py (8)         FK enforcement on every connection, FK violation rejection,
+                               rollback of failed transactions, persistence across engine
+                               restart, immutable configuration revisions, job state machine
+                               legality/terminal immutability, restart recovery -> interrupted.
+  test_configurations_api.py(14) CRUD, pagination/filters, model-path policy rejection,
+                               field-level validation errors, duplicate-name 409, revision
+                               bump preserving history, validate endpoint, hard vs soft
+                               delete, export/import round trip, malformed import writes
+                               nothing, unsupported schema version rejected, hidden model path.
+  test_workloads_api.py (5)    CRUD, version bump, invalid workload rejected, soft delete
+                               with history, unknown id 404, benchmark snapshot unaffected
+                               by later edits.
+  test_benchmarks_api.py (10)  Repetition/timeout bounds and context validation rejected,
+                               warmups executed then excluded while raw rows preserved,
+                               TTFT unavailable without streaming (no fabrication), partial
+                               runs preserve failures, all-failed run marked failed,
+                               model-load failure recorded with provenance, queue capacity
+                               bounded, cancel only for queued jobs, runtime-absent request
+                               fails controlled, compare flags test-only/protocol mismatch.
+  test_metrics.py (11)         Token provenance + derived metrics, zero-output never divides,
+                               missing token counts block throughput, failed rep keeps failure
+                               without a latency sample, timeout recorded as failure,
+                               disabled memory -> not_applicable (not zero), GPU memory
+                               missing without collector stays missing.
+  test_statistics.py (7)       mean/median/stddev on known values, n=0 -> nulls, n=1 ->
+                               null stddev/percentiles, percentile interpolation at n>=5,
+                               NaN/Inf/None rejected and counted, unavailable status discards
+                               values, no non-finite values in JSON output.
+  test_hardware.py (9)         Snapshot without GPU never fabricates zero, permission-denied
+                               and missing-dependency GPU states, failing collector doesn't
+                               break the snapshot, partial data leaves missing fields null,
+                               preflight estimate labeled estimated+advisory, preflight
+                               rejects missing model, warns when GPU requested but absent,
+                               resource monitor peaks/statuses.
+  test_optimizer.py (11)       Hard-constraint failure excludes fastest candidate, quality
+                               constraint excludes best latency without quality evidence,
+                               unknown metric -> insufficient evidence (not feasible),
+                               unit mismatch -> unknown evidence, no evidence -> insufficient,
+                               all infeasible -> no_feasible_candidate, deterministic tie
+                               break on configuration id, maximize-throughput and weighted
+                               score normalization, stale evidence rejected, test-only
+                               evidence rejected by default but allowed explicitly.
+  test_optimization_api.py (8) Decision selected from compatible evidence, decision create/
+                               list/get + alias routes, execute refuses infeasible decision,
+                               execute selected decision creates inference job, fresh
+                               benchmarking requires an installed runtime.
+  test_inference_api.py (5)    Inference runs and never persists prompt/output, retention
+                               requires server permission, exactly-one-target validation,
+                               unknown resources 404, list/get.
+  test_history_and_jobs.py (5) Job list filters + errors, history summary views, JSONL
+                               export parseable with complete provenance.
+  test_comparison.py (4)       Identical runs comparable with metric methods exposed, model
+                               mismatch blocks comparison with reasons, exact-match quality
+                               records evaluator metadata, missing evaluator stays unavailable.
+  test_e2e.py (1)              Full workflow: create config+workload -> submit benchmark ->
+                               poll job -> measurements -> create decision -> execute or
+                               assert no-feasible-candidate -> history export (fake runtime,
+                               clearly tagged test-only).
+  test_llamacpp_adapter.py (22) Mocked llama.cpp contract tests: capabilities (including a
+                               raising GPU probe), validation ranges, load kwarg mapping and
+                               override protection, OOM vs load failure, path sanitisation,
+                               failed-load state preservation, unload idempotency/failing
+                               close, generation streaming/TTFT/token provenance/timeout/
+                               stream-failure sanitisation/empty output. NO real model.
+  test_llamacpp_integration.py (1) Opt-in real-model check; skipped here because neither
+                               llama-cpp-python nor LATTICE_REAL_MODEL_PATH is available.
+                               Never downloads a model; asserts structure, not timings.
+
+
+14. OPERATIONAL PROCEDURES (verified commands, Windows)
+--------------------------------------------------------
+  cd Backend
+  .venv\Scripts\python -m pip install -r requirements.txt    # CPU-only install
+  .venv\Scripts\python -m alembic upgrade head               # explicit migration (optional;
+                                                             # auto_create_schema also works)
+  .venv\Scripts\python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+  .venv\Scripts\python -m pytest -q                          # -> 122 passed, 1 skipped
+  .venv\Scripts\python -m ruff check . && ruff format --check .   # -> 97 files formatted
+  .venv\Scripts\python scripts/smoke_fake_runtime.py         # end-to-end TEST-ONLY smoke
+Optional extras (never required): llama-cpp-python (real GGUF inference),
+nvidia-ml-py (NVML GPU telemetry). scripts/dev.ps1 orchestrates dev startup. This local
+research API is not hardened for public internet exposure.
+
+Live server verification used in this pass (all executed here):
+  .venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8123   # no runtime
+  .venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8124   # fake runtime
+  curl /health, /docs, /openapi.json, /api/v1/capabilities -> 200
+  The complete copy-paste procedure (PowerShell + curl.exe, expected outputs, error
+  envelopes, troubleshooting, optional real-model path) is docs/backend-run.txt.
+
+Optional real-model check (skips cleanly without the package/model):
+  $env:LATTICE_REAL_MODEL_PATH = "C:\models\your-model.gguf"
+  .venv\Scripts\python -m pytest tests/test_llamacpp_integration.py -v -s
+
+
+15. DOCUMENTATION PRESENT
+--------------------------
+  README.md                     Root overview, status, stack.
+  Backend/README.md             Install/start/test/env/runtime/limitations (CPU-only path).
+  docs/backend-run.txt          REQUIRED runbook: step-by-step setup, migration, startup,
+                                manual API verification, tests, fake-runtime smoke, optional
+                                real-model path, troubleshooting, results checklist, and an
+                                explicit list of commands executed vs not re-executed.
+  docs/backend-completion-audit.md  Audit matrix (requirement -> code -> status -> evidence),
+                                defects fixed, verification results, remaining limitations.
+  docs/product-built.txt        This document (functionality reference).
+  docs/architecture.md          Request path, service boundaries, persistence, job machine.
+  docs/api.md                   Endpoints, payloads, errors, pagination, curl examples.
+  docs/benchmarking.md          Protocol, units, metric statuses, aggregation, comparison.
+  docs/hardware-detection.md    Collector matrix, availability states, preflight caveats.
+  docs/implementation-decisions.md  Decisions, deviations, tradeoffs, known limitations.
+  docs/handoff.md               Teammate ownership contracts (runtime/benchmarking/
+                                optimizer/API/frontend) with exact files and interfaces.
+  docs/development-workflow.md, docs/setup-windows.md
+  Backend/.env.example          Every supported setting with safe defaults (no secrets).
+
+
+16. KNOWN LIMITATIONS (honest list)
+------------------------------------
+- No real model has been benchmarked here: llama-cpp-python is not installed in this
+  environment, so all executed measurements come from the TEST-ONLY fake runtime (tagged
+  test_only and excluded from research views by default). Real llama.cpp execution is
+  implemented but unexercised.
+- Job queue is in-process and NOT durable across restarts: leftover work is marked
+  "interrupted" (documented policy), not resumed.
+- Cancellation only works for queued jobs; running native inference cannot be stopped.
+- GPU telemetry is best-effort (NVML or nvidia-smi); per-process VRAM attribution may be
+  unavailable; device-wide values are labeled as such.
+- Memory estimation in preflight is coarse (file size x 1.2) and advisory only; KV cache,
+  context length and batch effects are not modelled and VRAM is not predicted from model
+  metadata. Only an actual load is authoritative.
+- TTFT is unavailable when the runtime does not stream first-token timestamps.
+- Adapter timeouts are enforced between streamed chunks; a native call that never yields a
+  chunk blocks the worker thread. Cancellation is unsupported (409), never faked.
+- Effective execution mode (cpu/hybrid) is derived from the build's offload support plus
+  the requested gpu_layers, not verified per layer at runtime.
+- Only one Alembic revision exists, so "upgrade from a prior schema" is not yet testable.
+  Automatic schema creation can create tables without recording a migration version;
+  choose one policy per environment.
+- No type checker is configured (pyproject has no mypy/pyright section), so there is no type
+  gate to run.
+- No frontend UI exists yet (Frontend/ is an empty Vite scaffold); no Optuna/adaptive
+  optimizer; no distributed queue; benchmark noise sources (OS scheduling, thermals,
+  background load) are documented in docs/benchmarking.md.
+
+
+17. POST-BUILD DELTA LOG (what was added after the first build)
+----------------------------------------------------------------
+This section exists so an assistant can tell what changed after the initial product-built
+snapshot, instead of re-deriving it from git history.
+
+2026-10-21 - adapter contract hardening and documentation pass
+  Added/Implementation:
+    - Guarded llama.cpp GPU capability probe; degraded capability report on probe failure
+      (fixes a real /capabilities and /ready availability defect).
+    - 22 mocked llama-cpp adapter contract tests covering load/generate/unload, error
+      translation/sanitisation, timeout, empty output and stale-state behaviour.
+    - Opt-in real-model integration test gated by llama-cpp-python + LATTICE_REAL_MODEL_PATH,
+      with an explicit skip reason and no downloads.
+    - docs/backend-run.txt (required runbook) and docs/backend-completion-audit.md.
+    - Backend/README.md now links the runbook and documents the opt-in integration test.
+  Verified by execution:
+    - pytest: 122 passed, 1 skipped (was 100 passing before the new tests).
+    - ruff check: clean; ruff format --check: 97 files.
+    - Fresh Alembic migration on a temp DB: 11 app tables + alembic_version, revision head.
+    - uvicorn startup with no runtime installed: /health, /docs, /openapi.json,
+      /api/v1/capabilities = 200; llamacpp reported not_installed; 14 metrics listed.
+    - Full fake-runtime flow over HTTP (curl and PowerShell): benchmark completed with
+      3 measured repetitions + 1 warmup, 4 raw rows, decision selected, execution
+      validation passed, JSONL export parsed, comparison correctly blocked as test-only.
+    - scripts/smoke_fake_runtime.py: exit 0.
+  Still unverified:
+    - Real model load/generation and real benchmark numbers (no package, no .gguf here).
+    - Upgrade path from an older schema (no older revision exists yet).
+  Not changed:
+    - API routes, request/response schemas, status codes, database schema, optimizer
+      algorithm, job semantics. No frontend work was performed.

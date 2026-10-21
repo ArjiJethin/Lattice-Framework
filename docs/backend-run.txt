@@ -1,0 +1,756 @@
+================================================================================
+LATTICE FRAMEWORK - BACKEND RUN AND VERIFICATION GUIDE
+================================================================================
+Audience : the repository owner (and any developer) who wants to run the backend
+           and verify its behaviour step by step.
+Scope    : Backend only. The Frontend/ scaffold is not required for anything here.
+Written  : 2026-10-21, synchronised with the code in this repository.
+Companion: Backend/README.md (short version) and docs/backend-completion-audit.md
+           (what is verified, what is not).
+
+HOW TO READ THIS FILE
+  * Every command block starts with the directory it must run from.
+  * [VERIFIED HERE] means the command was executed in this environment and the
+    result is stated. [DOCUMENTED, NOT RE-EXECUTED] means the command matches the
+    repository but was not re-run during this audit (for example because the
+    virtual environment and packages already existed).
+  * Nothing in this guide downloads a model, requires a GPU, or requires network
+    access after dependency installation.
+  * This backend is a local research API. It has no authentication, no TLS and no
+    rate limiting. Do not expose it to the internet.
+
+--------------------------------------------------------------------------------
+1. PREREQUISITES
+--------------------------------------------------------------------------------
+Required:
+  * Python 3.11 or newer             (pyproject.toml: requires-python = ">=3.11")
+                                     Verified interpreter here: CPython 3.13.5
+  * pip
+  * SQLite                           (bundled with Python; no server to install)
+  * ~1 GB free disk for the virtual environment
+
+Optional (only for real-model work):
+  * llama-cpp-python                 real GGUF inference adapter
+  * nvidia-ml-py                     NVML GPU telemetry
+  * a local .gguf model file         never downloaded by this project
+
+Not required:
+  * GPU, CUDA, NVIDIA driver, model files, internet access, or a specific RAM size
+    for setup, startup, the default test suite, or the fake-runtime smoke test.
+
+Check your interpreter (any directory):
+
+    python --version
+
+If `python` is not on PATH, use the full path to your interpreter, or the Windows
+launcher if you have it, e.g. `py -3.13 --version`.
+
+--------------------------------------------------------------------------------
+2. OPEN A TERMINAL AT THE REPOSITORY ROOT
+--------------------------------------------------------------------------------
+The repository root is the folder that contains `Backend/`, `Frontend/`, `docs/`
+and `README.md`.
+
+PowerShell:
+
+    cd C:\path\to\Lattice-Framework
+
+Command Prompt:
+
+    cd /d C:\path\to\Lattice-Framework
+
+Git Bash / macOS / Linux:
+
+    cd /path/to/Lattice-Framework
+
+All later commands are run from `Backend/` unless the block says otherwise:
+
+    cd Backend
+
+--------------------------------------------------------------------------------
+3. CREATE AND ACTIVATE A VIRTUAL ENVIRONMENT
+--------------------------------------------------------------------------------
+Run from: Backend/
+
+Windows PowerShell:
+
+    python -m venv .venv
+    .\.venv\Scripts\Activate.ps1
+
+If PowerShell blocks activation scripts, allow it for this shell only:
+
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+    .\.venv\Scripts\Activate.ps1
+
+Windows Command Prompt:
+
+    python -m venv .venv
+    .\.venv\Scripts\activate.bat
+
+Git Bash / macOS / Linux:
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+
+[DOCUMENTED, NOT RE-EXECUTED] The `.venv` already existed in this checkout and
+was reused, so creation/activation was not re-run during the audit. Every other
+command below was executed with `Backend/.venv/Scripts/python.exe`.
+
+Everything after this point can be run either with the environment activated, or
+by calling the interpreter explicitly:
+
+    .\.venv\Scripts\python.exe -m <module>        (Windows)
+    ./.venv/Scripts/python.exe -m <module>        (Git Bash)
+    ./.venv/bin/python -m <module>                (macOS/Linux)
+
+--------------------------------------------------------------------------------
+4. INSTALL DEPENDENCIES
+--------------------------------------------------------------------------------
+Run from: Backend/
+
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements.txt
+
+`requirements.txt` already contains the runtime, migration, and development/test
+packages (fastapi, uvicorn, pydantic, pydantic-settings, sqlalchemy, psutil,
+alembic, pytest, pytest-asyncio, httpx, ruff). The optional runtime and GPU
+packages are commented out and are never required for startup or tests.
+
+Optional extras (install only if you need them):
+
+    python -m pip install llama-cpp-python     # real GGUF inference
+    python -m pip install nvidia-ml-py         # NVML GPU telemetry
+
+[DOCUMENTED, NOT RE-EXECUTED] The environment already had all required packages;
+versions observed: uvicorn 0.54.0, alembic 1.20.0. `llama-cpp-python` and
+`nvidia-ml-py` were NOT installed here (and the backend still started and ran).
+
+If pip fails, first confirm `python --version` is 3.11+, then upgrade pip as
+shown. Do not install GPU wheels you do not need.
+
+--------------------------------------------------------------------------------
+5. CREATE THE ENVIRONMENT FILE
+--------------------------------------------------------------------------------
+Run from: Backend/
+
+PowerShell:
+
+    Copy-Item .env.example .env
+
+Command Prompt:
+
+    copy .env.example .env
+
+Git Bash / macOS / Linux:
+
+    cp .env.example .env
+
+The application reads `Backend/.env` (and the process environment). Every setting
+has a safe default, so **no variable is strictly required to start**. Only change
+what you need:
+
+  * LATTICE_DATABASE_URL          default sqlite:///./data/lattice.db (relative to
+                                  Backend/). Use an absolute URL for anything else.
+  * LATTICE_MODEL_ROOTS           approved model directories (default ../models).
+                                  Required only when you register a model path.
+  * LATTICE_RUNTIME_ADAPTER       auto | llamacpp | fake  (default auto)
+  * LATTICE_RUNTIME_ALLOW_FAKE    default false. Must be true to use the fake
+                                  runtime, which is TEST ONLY.
+  * LATTICE_HOST / LATTICE_PORT   default 127.0.0.1 / 8000
+  * LATTICE_AUTO_CREATE_SCHEMA    default true (creates missing tables, never drops)
+
+Never place secrets in `.env` or in this repository: the backend needs none.
+`.env` is git-ignored.
+
+--------------------------------------------------------------------------------
+6. DATABASE INITIALISATION AND MIGRATIONS
+--------------------------------------------------------------------------------
+Run from: Backend/
+
+Two supported paths. Choose one; never delete an existing database to "fix"
+migrations, and never run `alembic downgrade base` on data you want to keep.
+
+6a. Default: automatic schema creation
+
+    LATTICE_AUTO_CREATE_SCHEMA=true (the default) makes the app run
+    Base.metadata.create_all() at startup. It creates missing tables and leaves
+    existing rows untouched. It does not record an Alembic version.
+
+6b. Explicit Alembic migrations (recommended for reproducible research runs)
+
+    LATTICE_AUTO_CREATE_SCHEMA=false must be set in `.env` (or the environment)
+    before starting the app, then:
+
+PowerShell:
+
+    $env:LATTICE_DATABASE_URL = "sqlite:///C:/absolute/path/lattice.db"
+    .\.venv\Scripts\python.exe -m alembic upgrade head
+    .\.venv\Scripts\python.exe -m alembic current
+
+Git Bash / macOS / Linux:
+
+    export LATTICE_DATABASE_URL="sqlite:////absolute/path/lattice.db"
+    ./.venv/Scripts/python.exe -m alembic upgrade head
+    ./.venv/Scripts/python.exe -m alembic current
+
+[VERIFIED HERE] On a fresh temporary SQLite file, `alembic upgrade head` exited 0,
+`alembic current` printed `cab7b3235e59 (head)`, and the database contained 11
+application tables plus `alembic_version`:
+benchmark_measurements, benchmark_metric_summaries, benchmark_runs,
+configuration_revisions, configurations, decision_candidates, inference_executions,
+jobs, optimization_decisions, workload_revisions, workloads.
+
+Notes:
+  * Only one revision exists, so "upgrade from an older schema" is not applicable
+    yet. New revisions will be additive; keep applying `upgrade head`.
+  * Alembic reads the same `LATTICE_DATABASE_URL` as the app, so set it before the
+    command. If you forget, it migrates the default database instead.
+  * SQLite foreign keys are enabled on every connection by the app.
+
+--------------------------------------------------------------------------------
+7. START THE BACKEND
+--------------------------------------------------------------------------------
+Run from: Backend/ (with the virtual environment active)
+
+    uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+Equivalent, without activation:
+
+    .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+[VERIFIED HERE] `python -m uvicorn app.main:app --host 127.0.0.1 --port 8123`
+started cleanly, logged "Application startup complete", and answered HTTP 200 on
+`/health`.
+
+URLs (default port 8000):
+
+    Swagger UI        http://127.0.0.1:8000/docs
+    ReDoc             http://127.0.0.1:8000/redoc
+    OpenAPI schema    http://127.0.0.1:8000/openapi.json
+    Liveness          http://127.0.0.1:8000/health      (alias /api/v1/health)
+    Readiness         http://127.0.0.1:8000/ready       (alias /api/v1/ready)
+    Capabilities      http://127.0.0.1:8000/api/v1/capabilities
+
+[VERIFIED HERE] `/docs`, `/openapi.json`, `/health` and `/api/v1/capabilities`
+all returned 200. Capabilities listed `llamacpp` with status `not_installed` and
+14 benchmark metrics, which is the correct state on a machine without the optional
+runtime installed.
+
+Stop the server with Ctrl+C in that terminal. If a previous run is still holding
+the port, see section 12.
+
+Readiness vs liveness: `/ready` returns 200 with
+`checks.runtime.status = "unavailable"` when no runtime is installed. Missing
+runtime is NOT a startup failure.
+
+--------------------------------------------------------------------------------
+8. FAST END-TO-END CHECK: FAKE-RUNTIME SMOKE SCRIPT
+--------------------------------------------------------------------------------
+Run from: Backend/   (no server needed; no GPU, model or network needed)
+
+    .\.venv\Scripts\python.exe scripts/smoke_fake_runtime.py
+
+What it does: creates a temporary SQLite database and a placeholder `.gguf`, then
+exercises configuration -> workload -> benchmark job -> raw measurements ->
+optimization decision -> decision execution -> inference -> JSONL export. It never
+touches your configured database and never downloads anything.
+
+[VERIFIED HERE] Exit code 0 with this output:
+
+    TEST-ONLY fake runtime: no real model is loaded and no real performance is measured
+    health: 200 ok
+    configuration: <uuid>
+    workload: <uuid>
+    benchmark job: completed
+    run: completed reps= 3 failed= 0 test_only= True
+    latency summary: measured <n> ms n= 3
+    decision: selected selected= <uuid>
+    inference: completed prompt_retained= False validation= passed
+    jsonl export lines: 1
+    smoke test finished successfully
+
+The measured numbers come from a simulated runtime. They are tagged `test_only`
+and prove wiring, not LLM performance.
+
+--------------------------------------------------------------------------------
+9. MANUAL FUNCTIONAL VERIFICATION OVER HTTP (FAKE RUNTIME, TEST ONLY)
+--------------------------------------------------------------------------------
+This section is for checking the real API surface by hand. It uses the test-only
+fake runtime, so no model is needed. The command pattern below was executed
+end-to-end here with PowerShell 5.1 and `curl.exe`; expected outputs are from that
+run.
+
+9a. Prepare an isolated demo environment
+
+Run from: Backend/ (PowerShell). Create a demo model placeholder and point the app
+at an isolated database so your real data is untouched:
+
+    New-Item -ItemType Directory -Force C:\lattice-demo\models | Out-Null
+    [IO.File]::WriteAllBytes("C:\lattice-demo\models\demo.gguf", [Text.Encoding]::ASCII.GetBytes("demo-model-bytes" * 32))
+    $env:LATTICE_DATABASE_URL = "sqlite:///C:/lattice-demo/demo.db"
+    $env:LATTICE_MODEL_ROOTS = "C:\lattice-demo\models"
+    $env:LATTICE_RUNTIME_ADAPTER = "fake"
+    $env:LATTICE_RUNTIME_ALLOW_FAKE = "true"
+    $env:LATTICE_GPU_TELEMETRY_ENABLED = "false"
+
+Start the server in that same terminal and leave it running:
+
+    .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+Open a SECOND PowerShell window for the steps below (from any directory). Each
+step prints what it received; IDs are kept in variables for the next step.
+
+9b. Credentials-free helper (paste once per window)
+
+    $base = "http://127.0.0.1:8000/api/v1"
+    function Post-Json($path, $payload) {
+        $json = $payload | ConvertTo-Json -Depth 6
+        $json | curl.exe -s -X POST "$base$path" -H "Content-Type: application/json" -d "@-" | ConvertFrom-Json
+    }
+
+`curl.exe` is the real curl shipped with Windows 10/11; do not use the
+`Invoke-WebRequest` alias. On macOS/Linux use `curl` instead of `curl.exe`; the
+flags are identical.
+
+9c. Step 1 - liveness and capabilities
+
+    curl.exe -s http://127.0.0.1:8000/health | ConvertFrom-Json
+    curl.exe -s "$base/capabilities" | ConvertFrom-Json
+
+Expect `status: ok`, and in capabilities: `runtime.adapters` containing `fake`
+with `available: true`, `test_runtime_enabled: true`, 14 entries in
+`benchmark_metrics`, and hardware fields whose missing values are `null` with a
+status reason (never `0`).
+
+9d. Step 2 - create a configuration profile
+
+    $config = Post-Json "/configurations" @{
+        name = "demo-config"
+        model_id = "demo-model"
+        model_format = "gguf"
+        quantization = "q4_k_m"
+        model_path = "C:\lattice-demo\models\demo.gguf"
+        context_length = 2048
+        runtime_adapter = "fake"
+        generation_defaults = @{ max_tokens = 10 }
+    }
+    $config | Select-Object id, name, validation_state, model_file_name, model_file_present
+
+Expect HTTP 201 and a UUID. Note that the response deliberately contains
+`model_file_name` / `model_path_configured` but never the absolute path.
+
+9e. Step 3 - validate the configuration (preflight)
+
+    Post-Json "/configurations/$($config.id)/validate" @{} |
+        Select-Object validation_state, runtime_adapter, runtime_available
+    Post-Json "/configurations/$($config.id)/validate" @{} | ForEach-Object { $_.checks }
+    Post-Json "/configurations/$($config.id)/validate" @{} | ForEach-Object { $_.preflight.estimate }
+
+Expect `validation_state: valid` and checks for path policy, extension, file
+existence and runtime availability. The memory estimate is labelled
+`status: estimated`, `method: gguf-file-size-heuristic/1`, `uncertainty: high`,
+and the response states that only an actual load is authoritative.
+
+9f. Step 4 - create a workload
+
+    $workload = Post-Json "/workloads" @{
+        name = "demo-workload"
+        workload_type = "generation"
+        input_spec = @{ prompt = "Explain caching in one sentence." }
+        output_tokens_target = 10
+        context_requirement = 512
+    }
+    $workload.id
+
+9g. Step 5 - submit a benchmark and poll its job
+
+    $accepted = Post-Json "/benchmarks" @{
+        configuration_id = $config.id
+        workload_id = $workload.id
+    }
+    $accepted
+
+Expect HTTP 202 with `status: queued`, `job_id`, `benchmark_run_id`,
+`test_only: true`.
+
+    $job = $null
+    for ($i = 0; $i -lt 200; $i++) {
+        $job = curl.exe -s "$base/jobs/$($accepted.job_id)" | ConvertFrom-Json
+        if ($job.status -in @("completed","failed","cancelled","interrupted")) { break }
+        Start-Sleep -Milliseconds 200
+    }
+    $job | Select-Object status, job_type, attempts, error_code
+
+Expect `completed`.
+
+9h. Step 6 - inspect the run, aggregates and raw repetitions
+
+    $run = curl.exe -s "$base/benchmarks/$($accepted.benchmark_run_id)" | ConvertFrom-Json
+    $run | Select-Object status, completed_repetitions, failed_repetitions, completed_warmups, test_only, snapshot_hash
+    $run.metric_summaries | Select-Object metric_name, status, mean, median, unit, sample_count
+    $run.aggregate_summary.counts
+
+    curl.exe -s "$base/benchmarks/$($accepted.benchmark_run_id)/measurements" |
+        ConvertFrom-Json | ForEach-Object { $_.items } |
+        Select-Object kind, status, sequence, latency_ms, ttft_ms, output_tokens
+
+[VERIFIED HERE] status `completed`, 3 measured repetitions, 0 failed, 1 warmup,
+4 raw rows (1 warmup + 3 measured), `test_only: true`. Warmups are stored but
+excluded from aggregates. Metrics with no data (for example `quality_score`
+without an evaluator, or GPU memory without a collector) show `unavailable` and
+null values, not zeros.
+
+9i. Step 7 - request an optimization decision
+
+    $decision = (Post-Json "/optimization/decisions" @{
+        workload_id = $workload.id
+        candidate_configuration_ids = @($config.id)
+        constraints = @(@{ metric = "latency_ms"; operator = "<="; value = 60000; unit = "ms" })
+        objective = "minimize_latency"
+        evidence_policy = @{ allow_test_only_evidence = $true }
+    }).decision
+    $decision | Select-Object status, selected_configuration_id, algorithm, algorithm_version
+    $decision.candidates[0] | Select-Object feasibility, score, rank
+    $decision.candidates[0].constraint_results
+
+Expect HTTP 201, `status: selected`, algorithm `baseline-feasibility-v1`, and a
+per-constraint result with `outcome: pass` plus the measured actual value. Setting
+`allow_test_only_evidence = $true` is required here because this run used the fake
+runtime; the default policy rejects it. To see rejection reasoning instead, change
+the constraint value to something below the measured latency and re-run: expect
+`status: no_feasible_candidate` with reasons, not a fallback selection.
+
+9j. Step 8 - execute the selected decision and validate the actual result
+
+    $execution = Post-Json "/optimization/decisions/$($decision.id)/execute" @{
+        prompt = "Execute the selected configuration."
+        generation_parameters = @{ max_tokens = 5 }
+    }
+    $execution
+
+    for ($i = 0; $i -lt 200; $i++) {
+        $execJob = curl.exe -s "$base/jobs/$($execution.job_id)" | ConvertFrom-Json
+        if ($execJob.status -in @("completed","failed","cancelled","interrupted")) { break }
+        Start-Sleep -Milliseconds 200
+    }
+    $execJob.status
+
+    $inference = curl.exe -s "$base/inference/$($execution.inference_execution_id)" | ConvertFrom-Json
+    $inference | Select-Object status, validation_status, prompt_retained, retained_output, latency_ms, output_tokens
+    $inference.constraint_results
+
+[VERIFIED HERE] execute -> 202; job `completed`; inference `completed` with
+`validation_status: passed`, `prompt_retained: false`, `retained_output: null`,
+and constraint results re-evaluated against the actual measurement. If the
+decision was not selected, execution is refused (409); if a constraint metric was
+not measurable, the result is `not_evaluated`, never `pass`.
+
+9k. Step 9 - history, comparison and JSONL export
+
+    curl.exe -s "$base/history/summary" | ConvertFrom-Json | ForEach-Object { $_.counts }
+
+    $outFile = "C:\lattice-demo\export.jsonl"
+    curl.exe -s "$base/history/export?include_test_only=true" -o $outFile
+    Get-Content $outFile | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json | Out-Null; "record ok" }
+
+[VERIFIED HERE] export returned HTTP 200 with `content-type: application/x-ndjson`
+and `x-record-count`; each line parsed as JSON with keys `record_type`,
+`schema_version`, `exported_at`, `run`, `measurements`, `metric_summaries`,
+`provenance`, `decision_references`.
+
+Comparison (needs two runs; `include_test_only` is not the comparison switch -
+compatibility is):
+
+    # submit a second compatible run first, then:
+    curl.exe -s "$base/benchmarks/compare?run_ids=$($accepted.benchmark_run_id)&run_ids=<second-run-id>" | ConvertFrom-Json
+
+[VERIFIED HERE] Otherwise-identical test-only runs are reported as
+`comparable: false` with `test_only_evidence` and `different_protocol_snapshots`
+warnings of severity `blocker` plus per-metric methods. This is intended: fake
+numbers are never presented as comparable model evidence.
+
+9l. Step 10 - error envelopes
+
+    curl.exe -s -o NUL -w "%{http_code}`n" "$base/benchmarks/does-not-exist"
+    curl.exe -s -X POST "$base/benchmarks" -H "Content-Type: application/json" -d "{\"configuration_id\":\"x\"}"
+
+Expect 404 `{"error":{"code":"not_found", ...,"request_id":...}}` and 422
+`{"error":{"code":"validation_error","details":{"fields":[...]}},...}`. Every
+response carries an `X-Request-ID` header.
+
+When you are done, stop the server (Ctrl+C) and close the second window. The demo
+database and model file are disposable; nothing outside `C:\lattice-demo` changed.
+
+--------------------------------------------------------------------------------
+10. AUTOMATED TESTS, LINT AND FORMAT
+--------------------------------------------------------------------------------
+Run from: Backend/
+
+    .\.venv\Scripts\python.exe -m pytest -q
+
+[VERIFIED HERE] 122 passed, 1 skipped, 1 warning in ~24 seconds. The single skip
+is the opt-in real-model test (section 11); the warning is a Starlette/httpx
+deprecation notice from `fastapi.testclient`, not a failure.
+
+Focused runs:
+
+    .\.venv\Scripts\python.exe -m pytest tests/test_llamacpp_adapter.py -q
+    .\.venv\Scripts\python.exe -m pytest tests/test_optimizer.py -q
+    .\.venv\Scripts\python.exe -m pytest tests/test_e2e.py -q
+    .\.venv\Scripts\python.exe -m pytest tests/test_metrics.py tests/test_statistics.py -q
+
+Adapter contract tests: 22 passed (mocked `llama_cpp`; no model, no package).
+`test_llamacpp_adapter.py` proves argument mapping, error translation, path
+sanitisation, timeouts and cleanup. It does not prove model performance.
+
+Lint and format:
+
+    .\.venv\Scripts\python.exe -m ruff check .
+    .\.venv\Scripts\python.exe -m ruff format --check .
+
+[VERIFIED HERE] "All checks passed!" and "97 files already formatted".
+
+Type checking: **not configured** in `pyproject.toml`, so there is no command to
+run and no type gate to satisfy.
+
+The suite is offline, deterministic, CPU-only, model-free and uses temporary
+SQLite databases plus the injected test-only runtime. It must stay that way.
+
+--------------------------------------------------------------------------------
+11. OPTIONAL: REAL MODEL VERIFICATION
+--------------------------------------------------------------------------------
+Only do this if you have a local `.gguf` file you are allowed to use. This project
+never downloads models and never chooses one for you.
+
+11a. Install the optional adapter
+
+Run from: Backend/
+
+    .\.venv\Scripts\python.exe -m pip install llama-cpp-python
+
+Confirm it is importable:
+
+    .\.venv\Scripts\python.exe -c "import llama_cpp; print(llama_cpp.__version__)"
+
+11b. Point the backend at an approved model root
+
+Run from: Backend/ (PowerShell), in the shell that will start the server:
+
+    $env:LATTICE_MODEL_ROOTS = "C:\models"
+    $env:LATTICE_RUNTIME_ADAPTER = "llamacpp"
+
+A model outside `LATTICE_MODEL_ROOTS` is rejected by the path policy. Leave
+`LATTICE_ALLOW_UNROOTED_MODEL_PATHS=false`.
+
+11c. Register and validate a real configuration
+
+Use the same HTTP steps as section 9, but with `runtime_adapter = "llamacpp"` and
+`model_path` pointing at your file under `C:\models`. Start the server first
+(section 7). Then:
+
+    $real = Post-Json "/configurations" @{
+        name = "real-gguf"
+        model_id = "your-model-id"
+        model_format = "gguf"
+        model_path = "C:\models\your-model.gguf"
+        context_length = 2048
+        thread_count = 4
+        gpu_layers = 0
+        runtime_adapter = "llamacpp"
+    }
+    Post-Json "/configurations/$($real.id)/validate" @{} | Select-Object validation_state, runtime_available
+
+A valid state means the path, extension, file and runtime are acceptable and the
+coarse memory estimate did not look dangerous. It is not a guarantee: only the
+actual load decides. A missing/installed-runtime problem appears as 503
+`runtime_unavailable` on benchmark/inference submission, not a crash.
+
+11d. Run one real benchmark
+
+Submit `/benchmarks` exactly as in section 9g with this configuration. Then inspect
+`metric_summaries`: values must come from the real runtime, `test_only` must be
+`false`, and `model_identity`, `runtime_metadata`, `hardware_snapshot` and
+`software_versions` must be populated. If the runtime does not expose a metric
+(for example token usage or a first-token timestamp), that metric must be
+`unavailable` with a reason - never estimated.
+
+11e. Opt-in adapter integration test (no model download)
+
+The test file already exists and skips in the default suite. To run it:
+
+    $env:LATTICE_REAL_MODEL_PATH = "C:\models\your-model.gguf"
+    .\.venv\Scripts\python.exe -m pytest tests/test_llamacpp_integration.py -v -s
+
+It loads the model, generates a short reply, prints measured facts, unloads, and
+asserts only structural properties (non-empty output, no fabricated token counts).
+[VERIFIED HERE] Without `llama-cpp-python` and without the variable it reports
+`1 skipped` with a clear reason. In this environment no real model was available,
+so **native inference remains unverified**.
+
+--------------------------------------------------------------------------------
+12. TROUBLESHOOTING
+--------------------------------------------------------------------------------
+Command not found: uvicorn / pytest / ruff
+  You are in the wrong directory or the venv is not active. Run from Backend/ and
+  call the interpreter explicitly: `.\.venv\Scripts\python.exe -m pytest -q`.
+
+"python is not recognized"
+  Python is not on PATH. Install it with the "Add to PATH" option, use the full
+  interpreter path, or the `py` launcher if available.
+
+Activation blocked in PowerShell
+  `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` then activate again.
+  This affects only the current shell.
+
+pip install fails
+  Check `python --version` is 3.11+. Upgrade pip, then retry. `llama-cpp-python`
+  may need a compiler or a prebuilt wheel; it is optional, so the API and tests
+  must still work without it.
+
+Alembic errors
+  * Set `LATTICE_DATABASE_URL` in the same shell before `alembic upgrade head`.
+  * Run from Backend/ (alembic.ini lives there).
+  * `alembic current` should print `cab7b3235e59 (head)`.
+  * Never delete or reset a database to fix a migration; back it up instead.
+  * If tables exist but there is no version row, you previously used automatic
+    schema creation. Keep using it, or migrate a fresh database and move your data
+    deliberately - do not stamp blindly.
+
+Port already in use
+  Change `--port 8010`, or find the owner:
+      netstat -ano | findstr :8000
+      tasklist /FI "PID eq <pid>"
+  and stop only the process you identified.
+
+Missing optional collectors
+  Expected. `/capabilities` shows `not_installed` / `unsupported` /
+  `permission_denied` with null values. Do not install GPU packages just to make
+  the API start.
+
+`503 runtime_unavailable`
+  No usable runtime is installed or the fake adapter is disabled. Install
+  `llama-cpp-python` and set `LATTICE_RUNTIME_ADAPTER=llamacpp`, or for wiring
+  tests only set `LATTICE_RUNTIME_ADAPTER=fake` and
+  `LATTICE_RUNTIME_ALLOW_FAKE=true`.
+
+Model path rejected
+  The file must exist and live inside an approved root. Set `LATTICE_MODEL_ROOTS`
+  to the parent directory and use an absolute path.
+
+Out of memory (`out_of_memory`)
+  The runtime could not allocate. Reduce context length, batch size or GPU layers,
+  or choose a smaller quantization. Preflight estimates are advisory and may miss
+  this. Increase `LATTICE_PREFLIGHT_POLICY=strict` only if you want unknown
+  estimates rejected instead of warned.
+
+`409` when cancelling
+  Only queued jobs can be cancelled. Native inference is not preemptible, so a
+  running job is refused rather than falsely marked cancelled.
+
+`503` on benchmark submission
+  The bounded queue is full (`queue_capacity_exhausted`). Wait for jobs to finish or
+  raise `LATTICE_JOB_MAX_WORKERS` / `LATTICE_JOB_MAX_PENDING` deliberately.
+
+Tests pass but nothing "real" happened
+  Correct - that is the default suite. See section 13.
+
+--------------------------------------------------------------------------------
+13. FAKE RUNTIME vs REAL INFERENCE (READ BEFORE CLAIMING RESULTS)
+--------------------------------------------------------------------------------
+The fake runtime is a deterministic simulator. It exists so the API, database,
+job worker, benchmark engine, optimizer and export can be tested offline.
+
+What fake-runtime evidence proves:
+  * requests are validated and persisted correctly;
+  * jobs run, terminate and recover correctly;
+  * repetitions, aggregates, snapshots, decisions, execution and exports are wired;
+  * missing data is reported as missing rather than invented.
+
+What it does NOT prove:
+  * that llama.cpp can load your model;
+  * real TTFT, latency, throughput, memory or quality;
+  * that GPU offload actually happened;
+  * anything about model output quality.
+
+Every fake run is tagged `test_only: true`, excluded from research history/export
+comparisons by default, and rejected as optimization evidence unless
+`allow_test_only_evidence` is explicitly set (itself test-only).
+
+To claim real-model inference was tested you need, from one actual run:
+  * `test_only: false` on the benchmark run;
+  * a populated `model_identity` (path kept private, fingerprint/size present);
+  * populated `runtime_metadata` (adapter, version, effective execution mode);
+  * `status: completed` (or `partial` with failures explained);
+  * measured metric values with `status: measured` (or honest `unavailable`);
+  * hardware snapshot with collection statuses;
+  * the executed command/environment recorded in section 14.
+
+--------------------------------------------------------------------------------
+14. RESULTS CHECKLIST (FILL IN AFTER RUNNING)
+--------------------------------------------------------------------------------
+Copy this block and record your actual results. Do not record expected values as
+observed values.
+
+  Date ............................ :
+  OS / Python version ............. :
+  GPU telemetry available? ........ : yes / no / partial (state collector status)
+  llama-cpp-python installed? ..... : yes (version) / no
+  Real .gguf used? ................ : path + size / none
+
+  Setup
+    venv created / activated ...... : ok / failed
+    pip install -r requirements ... : ok / failed
+    .env created .................. : ok / skipped
+  Database
+    automatic schema creation ..... : ok / failed
+    alembic upgrade head .......... : ok / failed / version printed:
+    alembic current ............... : ok / failed / revision:
+  Server
+    uvicorn started ............... : ok / failed
+    /health ....................... : HTTP ___ / body status:
+    /docs ......................... : HTTP ___
+    /api/v1/capabilities .......... : HTTP ___ / adapters:
+  Tests
+    pytest -q ..................... : ___ passed, ___ failed, ___ skipped
+    ruff check . .................. : pass / fail
+    ruff format --check . ......... : pass / fail
+  Smoke
+    scripts/smoke_fake_runtime.py . : exit ___ / final line:
+  Manual fake-runtime flow
+    configuration validation ...... : state:
+    benchmark status .............. : ___ / reps ___ / failed ___
+    decision status ............... : ___ / selected:
+    execution validation .......... : ___
+    JSONL export .................. : ___ lines parsed / record keys:
+  Real model (if attempted)
+    integration test .............. : passed / failed / skipped (reason)
+    real benchmark run ............ : status ___ / test_only ___ / metrics measured:
+    real inference ................ : status ___ / latency ___ / tokens ___
+  Anything unexpected ............. :
+
+--------------------------------------------------------------------------------
+15. WHICH COMMANDS WERE ACTUALLY EXECUTED HERE
+--------------------------------------------------------------------------------
+Executed in this environment:
+  * `python -m pytest -q` full suite (122 passed, 1 skipped)
+  * adapter contract suite (22 passed) and the opt-in real-model test (1 skipped)
+  * `ruff check .` and `ruff format --check .`
+  * `alembic upgrade head` / `alembic current` on a fresh temporary SQLite DB
+  * uvicorn startup from `app.main:app` on 127.0.0.1 ports 8123, 8124 and 8125,
+    with `/health`, `/ready`-adjacent checks, `/docs`, `/openapi.json`,
+    `/api/v1/capabilities`
+  * the whole manual flow in section 9 twice: once with `curl` and once through a
+    PowerShell 5.1 script using `curl.exe` and the same command pattern
+  * `scripts/smoke_fake_runtime.py` (exit 0)
+  * response shapes quoted in this file, including error envelopes, JSONL export
+    headers and comparison blockers
+
+Documented but not re-executed:
+  * virtual environment creation/activation (the existing `.venv` was reused)
+  * `pip install -r requirements.txt` (packages already installed)
+  * macOS/Linux activation commands (not executable on this Windows machine)
+  * the optional real-model path (no `llama-cpp-python`, no GGUF file)
+
+If you change setup, routes, payloads, metric semantics or test counts, update this
+file together with `Backend/README.md` and `docs/backend-completion-audit.md`.
+================================================================================
