@@ -170,11 +170,15 @@ Use the helper script from the repository root:
   history/import/export, deterministic optimization and inference orchestration
   are implemented and covered by tests.
 - **Models & Inference**: No model weights are packaged or downloaded. The real
-  llama.cpp adapter is optional (`llama-cpp-python`); it is implemented but was
-  not exercised in this environment. Fake-runtime runs are test-only and are
-  never real model performance.
+  llama.cpp adapter is optional (`llama-cpp-python`) and has been exercised on a
+  local CPU-only Qwen2.5-0.5B-Instruct Q4_K_M GGUF through the HTTP API; measured
+  results and provenance are in `docs/backend-run.txt` section 11f. Fake-runtime
+  runs are test-only and are never real model performance.
 - **Not implemented**: distributed queueing, auth/TLS, GPU telemetry beyond
-  NVIDIA best-effort, rich quality evaluators, adaptive research optimizers.
+  NVIDIA best-effort, rich quality evaluators, adaptive research optimizers, and
+  model quantization/compression. Lattice selects a configuration from measured
+  evidence; it never quantizes or compresses a model, and the bundled Qwen GGUF
+  is already `Q4_K_M` from upstream.
 
 See [docs/implementation-decisions.md](docs/implementation-decisions.md) for the
 full limitations list.

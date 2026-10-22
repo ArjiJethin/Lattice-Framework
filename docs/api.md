@@ -197,10 +197,11 @@ clamped.
 
 | Method | Path | Status | Notes |
 | --- | --- | --- | --- |
-| POST | `/api/v1/optimization/decisions` | 201/202 | 201 with compatible evidence; 202 when fresh benchmarking was requested |
+| POST | `/api/v1/optimization/decisions` | 200/201/202 | 201 with compatible evidence; 202 when fresh benchmarking was requested; 200 replays the decision already stored for this `X-Request-ID` |
 | GET | `/api/v1/optimization/decisions` | 200 | filters `workload_id`, `status` |
 | GET | `/api/v1/optimization/decisions/{id}` | 200 | inputs, evidence, per-candidate feasibility, selected config |
-| POST | `/api/v1/optimization/decisions/{id}/execute` | 202 | only a persisted `selected` decision; creates an inference job |
+| POST | `/api/v1/optimization/decisions/{id}/execute` | 202 | only a persisted `selected` decision; creates an inference job (a repeated `X-Request-ID` replays it with `duplicate: true`) |
+| GET | `/api/v1/optimization/decisions/{id}/execution` | 200 | post-execution outcome derived from persisted rows: job/execution status, constraint results, actual metrics vs baseline evidence |
 
 Aliases: `POST /api/v1/optimization`, `GET /api/v1/optimization/{id}`.
 
@@ -231,6 +232,39 @@ curl -s -X POST http://127.0.0.1:8000/api/v1/optimization/decisions/$DECISION_ID
   -H 'Content-Type: application/json' \
   -d '{"prompt": "Say hello.", "generation_parameters": {"max_tokens": 16}}'
 ```
+
+Read back what the execution actually proved, next to the evidence that justified
+the decision:
+
+```bash
+curl -s http://127.0.0.1:8000/api/v1/optimization/decisions/$DECISION_ID/execution
+```
+
+`verdict` is `not_executed`, `pending`, `constraints_met`, `constraints_violated`,
+`completed_unverified`, `failed`, `cancelled`, `interrupted` or
+`execution_missing` (the job is terminal but its execution row no longer exists).
+`constraints_satisfied` is `null` when the outcome was never evaluated (for
+example no constraints were declared). Each entry in `metrics` carries
+`direction`, `baseline_value` (mean from the linked evidence run),
+`actual_value`, `absolute_delta`, `relative_delta_pct` and `improved`; a missing
+measurement stays `null` with a `reason`, and `improved` is never asserted
+without values on both sides. Repeated executions of the same decision are
+counted (`execution_count`) and the most recent one is reported.
+
+`X-Request-ID` is an idempotency key on benchmark, inference and job-backed
+decision submissions: replaying a key returns the existing resource with
+`duplicate: true` (HTTP 200 for decisions, 202 for benchmark/inference) instead
+of creating a second job, and reusing a key for a different target is
+`409 conflict`. Keys are scoped per job type, so the same string used for a
+benchmark and for an inference does not merge them. Check-and-create is atomic
+within one backend process (the process-local job model); concurrent duplicate
+submissions collapse to a single job/run/execution.
+
+Evidence selection: a candidate is evaluated against the **most recent**
+benchmark run that matches its workload snapshot, protocol version and run
+status, is inside `max_age_hours`, and has at least
+`min_successful_repetitions` successes. Older runs are still retrievable through
+`/history`, they are simply not the evidence used for the decision.
 
 Hard constraints are gates. A candidate failing any constraint is `infeasible`
 regardless of score. Missing required metrics produce `unknown` /

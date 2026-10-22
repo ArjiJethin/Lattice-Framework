@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 
 from app.api.deps import (
@@ -14,6 +14,7 @@ from app.schemas.optimization import (
     DecisionCreationResponse,
     DecisionExecuteRequest,
     DecisionExecuteResponse,
+    DecisionExecutionOutcome,
     DecisionPage,
     DecisionRead,
     OptimizationCreate,
@@ -26,21 +27,28 @@ router = APIRouter(tags=["Optimization"])
 @router.post(
     "/optimization/decisions",
     response_model=DecisionCreationResponse,
-    responses={201: {}, 202: {}},
+    responses={200: {}, 201: {}, 202: {}},
     summary="Create a deterministic optimization decision (201) or queue fresh evidence (202)",
 )
 def create_decision(
     payload: OptimizationCreate,
+    request: Request,
     service: OptimizationService = Depends(get_optimization_service),
 ):
-    creation = service.create(payload)
+    creation = service.create(payload, request_id=request.state.request_id)
     body = DecisionCreationResponse(
         decision=creation.decision,
         job_id=creation.job_id,
+        duplicate=creation.duplicate,
         message=(
-            "Decision persisted from existing compatible evidence"
-            if creation.job_id is None
-            else "Fresh benchmarking queued; the decision is pending evidence"
+            "Duplicate submission replayed: the decision persisted for this X-Request-ID "
+            "was returned without re-evaluating evidence"
+            if creation.duplicate
+            else (
+                "Decision persisted from existing compatible evidence"
+                if creation.job_id is None
+                else "Fresh benchmarking queued; the decision is pending evidence"
+            )
         ),
     )
     return JSONResponse(status_code=creation.http_status, content=body.model_dump(mode="json"))
@@ -70,6 +78,21 @@ def get_decision(
     return service.get_decision(decision_id)
 
 
+@router.get(
+    "/optimization/decisions/{decision_id}/execution",
+    response_model=DecisionExecutionOutcome,
+    summary=(
+        "Post-execution outcome of a decision: job status, actual metrics vs baseline evidence "
+        "and whether the declared constraints still hold"
+    ),
+)
+def decision_execution_outcome(
+    decision_id: str,
+    service: OptimizationService = Depends(get_optimization_service),
+) -> DecisionExecutionOutcome:
+    return service.execution_outcome(decision_id)
+
+
 @router.post(
     "/optimization/decisions/{decision_id}/execute",
     response_model=DecisionExecuteResponse,
@@ -78,9 +101,10 @@ def get_decision(
 def execute_decision(
     decision_id: str,
     payload: DecisionExecuteRequest,
+    request: Request,
     service: OptimizationService = Depends(get_optimization_service),
 ) -> DecisionExecuteResponse:
-    return service.execute(decision_id, payload)
+    return service.execute(decision_id, payload, request_id=request.state.request_id)
 
 
 # ---------------------------------------------------------------------------
@@ -89,22 +113,29 @@ def execute_decision(
 @router.post(
     "/optimization",
     response_model=DecisionCreationResponse,
-    responses={201: {}, 202: {}},
+    responses={200: {}, 201: {}, 202: {}},
     include_in_schema=True,
     summary="Alias of POST /optimization/decisions",
 )
 def create_decision_alias(
     payload: OptimizationCreate,
+    request: Request,
     service: OptimizationService = Depends(get_optimization_service),
 ):
-    creation = service.create(payload)
+    creation = service.create(payload, request_id=request.state.request_id)
     body = DecisionCreationResponse(
         decision=creation.decision,
         job_id=creation.job_id,
+        duplicate=creation.duplicate,
         message=(
-            "Decision persisted from existing compatible evidence"
-            if creation.job_id is None
-            else "Fresh benchmarking queued; the decision is pending evidence"
+            "Duplicate submission replayed: the decision persisted for this X-Request-ID "
+            "was returned without re-evaluating evidence"
+            if creation.duplicate
+            else (
+                "Decision persisted from existing compatible evidence"
+                if creation.job_id is None
+                else "Fresh benchmarking queued; the decision is pending evidence"
+            )
         ),
     )
     return JSONResponse(status_code=creation.http_status, content=body.model_dump(mode="json"))

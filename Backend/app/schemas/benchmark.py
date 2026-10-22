@@ -35,6 +35,9 @@ class BenchmarkAccepted(APIModel):
     status: str
     message: str
     test_only: bool = False
+    #: True when an ``X-Request-ID`` replay returned an already-persisted
+    #: submission instead of creating a second run.
+    duplicate: bool = False
 
 
 class MeasurementRead(APIModel):

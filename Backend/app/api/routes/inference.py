@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.api.deps import PageParams, get_inference_service, pagination
 from app.schemas.inference import (
@@ -24,9 +24,11 @@ router = APIRouter(prefix="/inference", tags=["Inference"])
 )
 def create_inference(
     payload: InferenceCreate,
+    request: Request,
     service: InferenceService = Depends(get_inference_service),
 ) -> InferenceAccepted:
-    return service.create(payload)
+    # X-Request-ID is an idempotency key: a replay returns the original execution.
+    return service.create(payload, request_id=request.state.request_id)
 
 
 @router.get("", response_model=InferencePage)

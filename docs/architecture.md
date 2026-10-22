@@ -1,7 +1,10 @@
 # Backend Architecture (Sections 4–6)
 
-Status: implemented and tested. Real model execution is not verified in this
-environment (see `docs/implementation-decisions.md`).
+Status: implemented and tested. Real llama.cpp execution is verified in this
+environment through the HTTP API (CPU-only, Qwen2.5-0.5B-Instruct Q4_K_M); the
+default test suite still runs offline with the test-only fake runtime. See
+`docs/backend-run.txt` section 11f for the measured results and
+`docs/implementation-decisions.md` for the design trade-offs.
 
 ---
 

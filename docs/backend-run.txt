@@ -5,8 +5,13 @@ Audience : the repository owner (and any developer) who wants to run the backend
            and verify its behaviour step by step.
 Scope    : Backend only. The Frontend/ scaffold is not required for anything here.
 Written  : 2026-10-21, synchronised with the code in this repository.
+Revised  : 2026-10-22 - added duplicate-submission replay (X-Request-ID) and the
+           post-execution decision outcome endpoint; refreshed the real-model
+           section, which is now VERIFIED in this environment.
 Companion: Backend/README.md (short version) and docs/backend-completion-audit.md
            (what is verified, what is not).
+Audit    : the original handoff audit is product-built.txt at the repository root.
+           It was left unchanged; this runbook describes the current behaviour.
 
 HOW TO READ THIS FILE
   * Every command block starts with the directory it must run from.
@@ -307,6 +312,12 @@ step prints what it received; IDs are kept in variables for the next step.
         $json = $payload | ConvertTo-Json -Depth 6
         $json | curl.exe -s -X POST "$base$path" -H "Content-Type: application/json" -d "@-" | ConvertFrom-Json
     }
+    function Post-Json-WithHeaders($path, $payload, $headers) {
+        $json = $payload | ConvertTo-Json -Depth 6
+        $args = @("-s", "-X", "POST", "$base$path", "-H", "Content-Type: application/json")
+        foreach ($key in $headers.Keys) { $args += @("-H", "$($key): $($headers[$key])") }
+        $json | curl.exe @args -d "@-" | ConvertFrom-Json
+    }
 
 `curl.exe` is the real curl shipped with Windows 10/11; do not use the
 `Invoke-WebRequest` alias. On macOS/Linux use `curl` instead of `curl.exe`; the
@@ -383,6 +394,44 @@ Expect HTTP 202 with `status: queued`, `job_id`, `benchmark_run_id`,
 
 Expect `completed`.
 
+Repeating the *same* submission with the same `X-Request-ID` header is an
+idempotent replay: the API returns the original job and run instead of creating a
+second one.
+
+    $headers = @{ "X-Request-ID" = "demo-benchmark-key-1" }
+    $first  = Post-Json-WithHeaders "/benchmarks" $body $headers   # 202, duplicate: false
+    $second = Post-Json-WithHeaders "/benchmarks" $body $headers   # 202, duplicate: true,
+                                                                  # same job_id / benchmark_run_id
+    (curl.exe -s "$base/benchmarks?include_test_only=true" | ConvertFrom-Json).total
+
+Expect `total: 1`. Reusing that key for a *different* configuration or workload is
+rejected with HTTP 409 `conflict` and details naming the existing run, because two
+different experiments must never look like one. `X-Request-ID` is generated per
+request when the header is absent, so normal clients are unaffected. The same rule
+applies to `POST /inference` (same execution replayed) and to job-backed
+`POST /optimization/decisions` requests (same decision replayed).
+
+[VERIFIED HERE - real model] two identical submissions returned the same run id,
+`duplicate: true` on the second, and `GET /benchmarks` still reported `total: 1`.
+
+Concurrent duplicates are covered too, because the replay check and the insert
+run inside one per-key critical section. To reproduce:
+
+    $jobs = 1..8 | ForEach-Object -Parallel {
+        curl.exe -s -X POST "$using:base/benchmarks" -H "Content-Type: application/json" `
+            -H "X-Request-ID: demo-concurrent-key" -d $using:jsonBody
+    } -ThrottleLimit 8
+
+[VERIFIED HERE - real model] eight simultaneous identical submissions returned
+one `benchmark_run_id`, seven responses with `duplicate: true`, and exactly one
+persisted run. Before the fix the same test produced eight runs (reproduced
+three times), which is why the critical section exists. The guarantee is
+process-local and matches the single-process job model; a multi-process
+deployment would need a database uniqueness constraint as well.
+
+Keys are scoped per job type: reusing a benchmark key for `POST /inference`
+creates a new inference instead of replaying the benchmark.
+
 9h. Step 6 - inspect the run, aggregates and raw repetitions
 
     $run = curl.exe -s "$base/benchmarks/$($accepted.benchmark_run_id)" | ConvertFrom-Json
@@ -414,7 +463,11 @@ null values, not zeros.
     $decision.candidates[0].constraint_results
 
 Expect HTTP 201, `status: selected`, algorithm `baseline-feasibility-v1`, and a
-per-constraint result with `outcome: pass` plus the measured actual value. Setting
+per-constraint result with `outcome: pass` plus the measured actual value. The
+selected evidence is the **most recent** compatible run for the workload
+snapshot, protocol version and evidence policy - not simply the oldest one -
+so when you have run several benchmarks compare `evidence_run_ids` with the run
+you expect to be used. Setting
 `allow_test_only_evidence = $true` is required here because this run used the fake
 runtime; the default policy rejects it. To see rejection reasoning instead, change
 the constraint value to something below the measured latency and re-run: expect
@@ -444,6 +497,32 @@ the constraint value to something below the measured latency and re-run: expect
 and constraint results re-evaluated against the actual measurement. If the
 decision was not selected, execution is refused (409); if a constraint metric was
 not measurable, the result is `not_evaluated`, never `pass`.
+
+The decision-level outcome is a separate, derived read model. It reports the job
+and execution state, the post-execution verdict, and every metric next to the
+benchmark evidence that justified the decision:
+
+    curl.exe -s "$base/optimization/decisions/$($decision.id)/execution" | ConvertFrom-Json |
+        Select-Object verdict, constraints_satisfied, execution_count, job_status,
+                      execution_status, baseline_run_id, baseline_available, actual_metrics_available
+
+    (curl.exe -s "$base/optimization/decisions/$($decision.id)/execution" | ConvertFrom-Json).metrics |
+        Select-Object metric, direction, baseline_value, actual_value, absolute_delta, relative_delta_pct, improved, reason
+
+`verdict` is one of `not_executed`, `pending`, `constraints_met`,
+`constraints_violated`, `completed_unverified`, `failed`, `cancelled`,
+`interrupted`, or `execution_missing` (the job is terminal but its execution row
+no longer exists, so no verdict can be derived). `improved` is only ever `true` when the measured value actually
+moved in the metric's preferred direction; it is `null` when either side is
+unavailable. Nothing here is remembered in memory: it is recomputed from the
+persisted job, inference execution and evidence run, so it survives a restart.
+
+[VERIFIED HERE - real model] before execution: `verdict: not_executed`, no actual
+values. After execution: `verdict: constraints_met`, `constraints_satisfied:
+true`, `execution_count: 1`, `baseline_run_id` set, `test_only: false`, and 11
+metrics compared. `latency_ms` reported baseline 808.92 ms vs actual 504.18 ms
+(delta -304.74 ms, `improved: true`). After a full backend restart the same
+endpoint still returned `constraints_met` with the same baseline.
 
 9k. Step 9 - history, comparison and JSONL export
 
@@ -488,9 +567,10 @@ Run from: Backend/
 
     .\.venv\Scripts\python.exe -m pytest -q
 
-[VERIFIED HERE] 122 passed, 1 skipped, 1 warning in ~24 seconds. The single skip
-is the opt-in real-model test (section 11); the warning is a Starlette/httpx
-deprecation notice from `fastapi.testclient`, not a failure.
+[VERIFIED HERE - 2026-10-22, second pass] 142 passed, 1 skipped in ~17 seconds.
+The single skip is the opt-in real-model test (section 11); it stays skipped in
+the default suite so no test needs a model file. (The suite was 122 passed before
+the idempotency/outcome/concurrency tests were added, then 134, then 141, then 142.)
 
 Focused runs:
 
@@ -583,9 +663,33 @@ The test file already exists and skips in the default suite. To run it:
 
 It loads the model, generates a short reply, prints measured facts, unloads, and
 asserts only structural properties (non-empty output, no fabricated token counts).
-[VERIFIED HERE] Without `llama-cpp-python` and without the variable it reports
-`1 skipped` with a clear reason. In this environment no real model was available,
-so **native inference remains unverified**.
+Without `llama-cpp-python` and without the variable it reports `1 skipped` with a
+clear reason; that is the state of the default suite.
+
+11f. Real-model results obtained in this environment
+
+[VERIFIED HERE - 2026-10-22] `llama-cpp-python` 0.3.36 is installed in
+`Backend/.venv` and a real CPU-only run was executed through this API against
+`models/qwen2.5-0.5b/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf` (397,808,192 bytes,
+context 2048, 4 threads, 0 GPU layers):
+
+  * capabilities : llamacpp 0.3.36, `backend: cpu`, acceleration `["cpu","AVX"]`,
+                   `supports_gpu_offload: false`, `is_test_runtime: false`
+  * preflight    : `feasible`; configuration validation state `valid`
+  * inference    : completed, 5 in / 16 out tokens from `tokenizer:llama_cpp`,
+                   latency 717.10 ms, TTFT 196.60 ms, `test_only: false`
+  * benchmark    : 3/3 successful repetitions, 0 failed, 1 warmup, 4 raw rows,
+                   `test_only: false`; latency mean 808.92 ms, TTFT mean 39.15 ms,
+                   throughput mean 29.87 tokens/s, peak process RSS 601.79 MB
+  * honest nulls : `peak_gpu_device_memory_used_mb` -> `unavailable`
+                   ("GPU telemetry disabled by configuration"), `quality_score`
+                   -> `unavailable` (no evaluator configured)
+  * decision     : `selected` from that real evidence, both constraints `pass`
+  * execution    : `constraints_met`, actual latency 504.18 ms vs baseline 808.92 ms
+  * restart      : history, decision, outcome and the idempotency key survived
+
+These are historical observations from this machine, not performance targets.
+Re-run the steps above to obtain your own numbers; never quote these as a new run.
 
 --------------------------------------------------------------------------------
 12. TROUBLESHOOTING
@@ -732,10 +836,21 @@ observed values.
 15. WHICH COMMANDS WERE ACTUALLY EXECUTED HERE
 --------------------------------------------------------------------------------
 Executed in this environment:
-  * `python -m pytest -q` full suite (122 passed, 1 skipped)
+  * `python -m pytest -q` full suite (142 passed, 1 skipped; was 122 passed,
+    1 skipped before the 2026-10-22 idempotency/outcome work)
   * adapter contract suite (22 passed) and the opt-in real-model test (1 skipped)
-  * `ruff check .` and `ruff format --check .`
-  * `alembic upgrade head` / `alembic current` on a fresh temporary SQLite DB
+  * `ruff check .` and `ruff format --check .` (98 files formatted)
+  * `alembic upgrade head` on a fresh temporary SQLite DB (12 tables, revision
+    cab7b3235e59)
+  * a full real-model workflow over live uvicorn HTTP: capabilities,
+    configuration + preflight, real inference, real 3-repetition benchmark with
+    duplicate-submission replay, 8 concurrent duplicate submissions (one run),
+    cross-scope key isolation, optimization decision, decision execution,
+    post-execution outcome, history, JSONL export, error envelopes, then a
+    forced restart proving persistence
+  * `PRAGMA foreign_key_check`, stuck-job/run/execution queries, orphaned
+    decision queries and duplicate-request-key queries against the live database
+    after that restart (all clean, server log had zero tracebacks)
   * uvicorn startup from `app.main:app` on 127.0.0.1 ports 8123, 8124 and 8125,
     with `/health`, `/ready`-adjacent checks, `/docs`, `/openapi.json`,
     `/api/v1/capabilities`
@@ -749,7 +864,10 @@ Documented but not re-executed:
   * virtual environment creation/activation (the existing `.venv` was reused)
   * `pip install -r requirements.txt` (packages already installed)
   * macOS/Linux activation commands (not executable on this Windows machine)
-  * the optional real-model path (no `llama-cpp-python`, no GGUF file)
+  * the Tauri desktop build (out of scope for the backend)
+
+The optional real-model path IS executed here; see section 11f. It is no longer
+listed as unverified.
 
 If you change setup, routes, payloads, metric semantics or test counts, update this
 file together with `Backend/README.md` and `docs/backend-completion-audit.md`.
