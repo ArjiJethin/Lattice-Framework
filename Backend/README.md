@@ -182,10 +182,11 @@ Defaults worth knowing:
   a second job/run/execution; reusing a key for a different target is a `409`
   conflict. Keys are generated per request when the header is absent. The
   replay check and the insert run in one per-key critical section
-  (`app/core/idempotency.py`), so simultaneous duplicates cannot create two
-  rows; that guarantee is **process-local**, matching the single-process job
-  manager, and a future multi-process deployment would additionally need a
-  database uniqueness constraint on `(job_type, request_id)`.
+  (`app/core/idempotency.py`), with a database uniqueness constraint on
+  `(job_type, request_id)` as the cross-process safety net. `NULL` keys are not
+  idempotent and remain exempt from the uniqueness rule. A losing transaction
+  is rolled back before the winning job is replayed, so it cannot leave related
+  rows behind.
 - **Model optimization scope.** Lattice optimizes *configuration selection*:
   which persisted profile/window to run, gated by measured evidence and hard
   constraints. It does **not** quantize, compress, prune or train models. The

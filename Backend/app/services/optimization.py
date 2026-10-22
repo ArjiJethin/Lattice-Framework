@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.benchmarking.protocol import PROTOCOL_VERSION
@@ -21,7 +22,7 @@ from app.core.errors import (
     NotFoundError,
     ValidationFailure,
 )
-from app.core.idempotency import idempotency_lock
+from app.core.idempotency import idempotency_lock, is_job_idempotency_conflict
 from app.core.logging import get_logger
 from app.core.settings import Settings
 from app.core.time import new_id
@@ -171,6 +172,15 @@ class OptimizationService:
                 decision_repo.create(self.session, decision)
                 job.resource_id = decision.id
                 self.session.commit()
+            except IntegrityError as exc:
+                self.session.rollback()
+                self.job_manager.release()
+                if not request_id or not is_job_idempotency_conflict(exc):
+                    raise
+                replay = self._replay(request_id, payload)
+                if replay is None:
+                    raise
+                return replay
             except Exception:
                 self.session.rollback()
                 self.job_manager.release()
@@ -654,7 +664,7 @@ class OptimizationService:
                         runtime_locks=self.runtime_locks,
                         session_factory=self.session_factory,
                     )
-                    _job_id, run_id, _test_only = service.provision(
+                    _job_id, run_id, _test_only, _duplicate = service.provision(
                         BenchmarkCreate(
                             configuration_id=configuration.id,
                             workload_id=decision.workload_id,

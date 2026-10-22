@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.benchmarking.metrics import MeasurementDraft, measure_repetition
@@ -20,7 +21,7 @@ from app.core.errors import (
     NotFoundError,
     ValidationFailure,
 )
-from app.core.idempotency import idempotency_lock
+from app.core.idempotency import idempotency_lock, is_job_idempotency_conflict
 from app.core.logging import get_logger
 from app.core.settings import Settings
 from app.core.time import monotonic, new_id, utcnow
@@ -170,6 +171,17 @@ class InferenceService:
             job.resource_id = execution.id
             self.register_prompt(execution.id, payload.prompt, payload.system_prompt)
             self.session.commit()
+        except IntegrityError as exc:
+            self.session.rollback()
+            self.job_manager.release()
+            if not request_id or not is_job_idempotency_conflict(exc):
+                raise
+            _PROMPTS.pop(execution.id, None)
+            _SYSTEM_PROMPTS.pop(execution.id, None)
+            replay = self._replay(request_id, payload, linked_decision_id)
+            if replay is None:
+                raise
+            return replay
         except Exception:
             self.session.rollback()
             self.job_manager.release()

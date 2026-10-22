@@ -184,6 +184,9 @@ class WorkloadRevision(Base):
 # ---------------------------------------------------------------------------
 class Job(Base):
     __tablename__ = "jobs"
+    __table_args__ = (
+        UniqueConstraint("job_type", "request_id", name="uq_jobs_job_type_request_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     job_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
