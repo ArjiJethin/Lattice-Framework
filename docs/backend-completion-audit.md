@@ -1,5 +1,37 @@
 # Backend Completion Audit
 
+> **Addendum, 2026-10-22 (read this first).** Everything below is the original
+> 2026-10-21 audit and is kept as a historical record. Two of its environment
+> statements are now out of date and are superseded here rather than rewritten:
+>
+> * `llama-cpp-python` **is** installed in `Backend/.venv` (0.3.36) and a local
+>   GGUF model **is** available, so item 9 (real end-to-end inference) is
+>   **verified**, not "missing (environment)". Real inference and a 3-repetition
+>   real benchmark were executed through the HTTP API; measured results are in
+>   `docs/backend-run.txt` section 11f.
+> * The suite is now **134 passed, 1 skipped** (the skip is still the opt-in
+>   real-model test, which deliberately does not run in the default suite).
+>
+> Work completed after this audit: `X-Request-ID` duplicate-submission replay for
+> benchmark/inference/job-backed optimization submissions, the
+> `GET /optimization/decisions/{id}/execution` post-execution outcome endpoint
+> with baseline comparison, terminalisation of decisions whose evidence worker
+> fails, stricter `evidence_policy.allowed_run_statuses` validation, an
+> `evidence_hardware_mismatch` warning, and removal of cross-thread session use in
+> the inference worker. Current contracts: `Backend/README.md` and
+> `docs/backend-run.txt`.
+>
+> **Second pass, 2026-10-22.** The duplicate-submission protection added earlier
+> was not atomic: the replay check and the insert were separate statements, so
+> eight simultaneous requests carrying the same `X-Request-ID` created eight
+> runs (reproduced three times against a live server, then again through the test
+> client). `app/core/idempotency.py` now serialises check-and-create per
+> `(job_type, key)`, and both a unit/API regression test and a live probe confirm
+> one run with seven `duplicate: true` responses. The outcome view also gained an
+> explicit `execution_missing` verdict for a terminal job whose execution row is
+> gone. Suite: **142 passed, 1 skipped**. Idempotency remains process-local by
+> design, matching the single-process job manager.
+
 Audit date: 2026-10-21
 Scope: `Backend/` only. The `Frontend/` scaffold was not modified.
 Method: inspect the repository, run the actual commands, then fix verified gaps.

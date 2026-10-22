@@ -45,6 +45,21 @@ def list_jobs(
     return items, total
 
 
+def find_by_request(session: Session, *, job_type: str, request_id: str) -> Job | None:
+    """Return the first job recorded for an idempotency key.
+
+    ``X-Request-ID`` is treated as a client-supplied idempotency key: replaying
+    the same request must never create a second job (and therefore never a
+    second benchmark/inference row).
+    """
+    stmt = (
+        select(Job)
+        .where(Job.job_type == job_type, Job.request_id == request_id)
+        .order_by(Job.created_at.asc(), Job.id.asc())
+    )
+    return session.scalars(stmt).first()
+
+
 def count_by_status(session: Session, status: str) -> int:
     return int(
         session.scalar(select(func.count()).select_from(Job).where(Job.status == status)) or 0

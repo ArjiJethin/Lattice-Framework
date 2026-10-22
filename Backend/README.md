@@ -8,10 +8,13 @@ statistics, evaluates hard constraints, persists deterministic optimization
 decisions and executes the selected configuration.
 
 > **Honest status:** the persistence/API/benchmark/decision path is implemented
-> and tested. Real llama.cpp execution is an optional adapter that is **not
-> installed by default and has not been exercised in this environment**. The
-> default test suite uses a clearly marked test-only fake runtime; its numbers
-> are never real model performance.
+> and tested, and real llama.cpp execution has been **verified in this
+> environment** through the HTTP API (llama-cpp-python 0.3.36, CPU-only, a local
+> Qwen2.5-0.5B-Instruct Q4_K_M GGUF). The runtime stays an *optional* extra: the
+> default test suite is still offline and model-free and uses a clearly marked
+> test-only fake runtime whose numbers are never real model performance.
+> Verified results, including the ones quoted in [`../docs/backend-run.txt`](../docs/backend-run.txt),
+> are historical observations from one machine - not performance targets.
 
 ---
 
@@ -173,6 +176,28 @@ Defaults worth knowing:
 - **Fake runtime.** Test/development only. Runs are tagged `test_only`, excluded
   from research summaries/exports/comparisons by default, and rejected as
   optimization evidence unless explicitly allowed.
+- **Duplicate submissions.** `X-Request-ID` is an idempotency key for
+  benchmark, inference and job-backed optimization submissions. Replaying the
+  same key returns the persisted work with `duplicate: true` instead of creating
+  a second job/run/execution; reusing a key for a different target is a `409`
+  conflict. Keys are generated per request when the header is absent. The
+  replay check and the insert run in one per-key critical section
+  (`app/core/idempotency.py`), so simultaneous duplicates cannot create two
+  rows; that guarantee is **process-local**, matching the single-process job
+  manager, and a future multi-process deployment would additionally need a
+  database uniqueness constraint on `(job_type, request_id)`.
+- **Model optimization scope.** Lattice optimizes *configuration selection*:
+  which persisted profile/window to run, gated by measured evidence and hard
+  constraints. It does **not** quantize, compress, prune or train models. The
+  GGUF used in the verified runs was already `Q4_K_M` from upstream, so a
+  successful benchmark of it demonstrates inference quality, never a
+  compression pipeline. Adaptive/learned optimizers and compression are
+  explicitly out of scope (see the root `README.md` limitations list).
+- **Decision outcomes.** `GET /api/v1/optimization/decisions/{id}/execution`
+  derives the post-execution verdict (job/execution status, constraint results,
+  actual values against the baseline evidence run) from persisted rows only.
+  A missing measurement stays `null` with a reason; `improved` is never asserted
+  without a measured value on both sides.
 - **Public exposure.** This is a local research API. Do not expose it to the
   internet without authentication, TLS and rate limiting (not implemented).
 

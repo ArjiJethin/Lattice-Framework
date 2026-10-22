@@ -1,0 +1,422 @@
+LATTICE-FRAMEWORK — COMPLETE IMPLEMENTATION AUDIT AND HANDOFF REPORT
+=====================================================================
+Generated: 2026-10-22 (audit-only pass; no application code was modified)
+Repository: C:\Users\aluru\OneDrive\Desktop\Projects\Lattice-Framework
+Branch: main @ b5c92bc ("Merge branch 'main' of https://github.com/ArjiJethin/Lattice-Framework")
+
+Note: docs/product-built.txt (older, backend-focused audit from an earlier pass) was left
+untouched. This file is the new root-level full-stack audit required by the handoff prompt.
+
+
+A. EXECUTIVE SUMMARY
+--------------------
+The project has two halves at very different maturity levels:
+
+* BACKEND (Backend/) — GENUINELY COMPLETE and verified by execution in this audit.
+  FastAPI 0.151.0 / SQLAlchemy 2 / Alembic / SQLite service with 37 API paths, a bounded
+  in-process job manager, a deterministic hard-constraint optimizer, a benchmark engine with
+  research-grade metric provenance, and — verified today — REAL llama.cpp inference:
+  llama-cpp-python 0.3.36 is installed in Backend/.venv, and I reproduced, through the actual
+  HTTP API on an isolated temp database, a real Qwen2.5-0.5B-Instruct-Q4_K_M GGUF inference
+  execution (8 output tokens) and a real benchmark run (2 measured reps, latency mean
+  468.1 ms, TTFT mean 33.9 ms, test_only=false). A prior real run is also persisted in the
+  untracked Backend/lattice-real-validation.db (1 completed benchmark run, 4 raw
+  measurements, real tokenizer-sourced token counts). 122 unit/API tests pass, Ruff is clean,
+  the fake-runtime smoke test passes, and a fresh Alembic migration creates the full schema.
+
+* FRONTEND (Frontend/) — VISUALLY POLISHED BUT FUNCTIONALLY DISCONNECTED from the backend.
+  A React 18 + Vite 6 + Tailwind + Three.js/ECharts overview dashboard, packaged as a Tauri 2
+  desktop shell. It builds successfully, but it was written against an aspirational contract
+  (docs/api-contract.md, explicitly addressed to "Backend Developer 2") that the backend never
+  implemented. Executed probes against a live backend show: GET /api/v1/health → 200, but
+  GET /system/status, /profiles, /experiments, /metrics/overview, /trends → 404 and
+  POST /optimization/plan → 405. Only the Overview screen exists as a real page; Model Lab,
+  Optimization Lab, Experiments and Settings render a placeholder. The UI silently falls back
+  to hardcoded demo fixtures (a fictional "Qwen3-1.7B" on an "RTX 4060"), so it LOOKS
+  functional while showing mock data.
+
+BOTTOM LINE: The application can run end to end TODAY through the API (verified), but NOT
+through the UI (blocked by the frontend/backend contract mismatch). The single P0 blocker is
+bridging that contract gap. Everything else is incremental.
+
+
+B. REPOSITORY MAP
+-----------------
+C:\Users\aluru\OneDrive\Desktop\Projects\Lattice-Framework\
+├── Backend/                     FastAPI service (the complete half)
+│   ├── app/main.py              create_app() factory + ASGI entry; lifespan restart-recovery
+│   ├── app/api/router.py        assembles 8 route modules under /api/v1
+│   ├── app/api/routes/          benchmarks, configurations, health, history, inference,
+│   │                            jobs, optimization, workloads
+│   ├── app/services/            benchmarks, comparison, configurations, history, inference,
+│   │                            io, jobs, optimization, snapshots, workloads
+│   ├── app/optimization/        baseline.py (BaselineOptimizer, "baseline-feasibility-v1"),
+│   │                            contracts.py
+│   ├── app/runtime/             base.py, llamacpp.py (real adapter), fake.py (TEST-ONLY),
+│   │                            registry.py, locks.py
+│   ├── app/benchmarking/        metrics.py, protocol.py, quality.py, statistics.py
+│   ├── app/hardware/            collectors.py, preflight.py, service.py, telemetry.py
+│   ├── app/db/                  models.py (11 ORM models), session.py
+│   ├── app/jobs/manager.py      bounded ThreadPoolExecutor + capacity reservation
+│   ├── alembic/                 1 revision: cab7b3235e59 "initial lattice schema"
+│   ├── scripts/smoke_fake_runtime.py   offline E2E smoke (TestClient, temp DB)
+│   ├── tests/                   17 test modules, 123 tests
+│   ├── .venv/                   Python 3.13.5, llama-cpp-python 0.3.36 INSTALLED
+│   └── data/lattice.db          default dev DB (schema present, 0 rows)
+├── Frontend/                    Tauri 2 desktop app (the disconnected half)
+│   ├── src/App.tsx              Sidebar nav; Overview vs PlaceholderPage
+│   ├── src/pages/OverviewPage.tsx    the one real screen (3D lattice + charts)
+│   ├── src/pages/PlaceholderPage.tsx Model Lab / Optimization Lab / Experiments / Settings
+│   ├── src/lib/api/client.ts    useOverviewData hook + apiClient (contract mismatch here)
+│   ├── src/lib/api/demoData.ts  hardcoded fixtures (Qwen3-1.7B, RTX 4060) — the fallback
+│   ├── src/lib/api/apiContract.ts    aspirational contract doc-as-code
+│   └── src-tauri/               Tauri shell (main.rs + shell:allow-open capability)
+├── docs/                        api.md, api-contract.md (ASPIRATIONAL — see §D),
+│                                architecture.md, backend-run.txt, benchmarking.md,
+│                                backend-completion-audit.md, handoff.md, product-built.txt
+├── models/                      two COPIES of Qwen2.5-0.5B-Instruct-Q4_K_M.gguf (398 MB
+│                                each; dir "qwen2.4-0.5B" is mislabeled) — gitignored
+├── experiments/{reports,results,workloads}/   empty scaffolding
+└── scripts/dev.ps1              Windows dev launcher
+
+Git state at audit time: clean except the owner's uncommitted change bumping
+Frontend vite ^6.1.0 → ^6.4.5 in package.json/package-lock.json (preserved, not touched).
+Note: git tracks the frontend directory as lowercase "frontend/" while the working tree uses
+"Frontend/"; harmless on Windows, would matter on a case-sensitive clone (P3).
+
+
+C. FIVE-SECTION COMPLETION MATRIX
+---------------------------------
+Status labels: COMPLETE / PARTIAL / NOT IMPLEMENTED / BLOCKED / UNKNOWN
+
+| # | Section | Implemented | Verified by execution | Frontend integrated | Missing or broken | Status |
+|---|---------|-------------|----------------------|--------------------|--------------------|--------|
+| 1 | Adaptive Optimizer & Decision Engine | Yes — BaselineOptimizer, hard-constraint gating, evidence policy, persisted decisions with per-candidate explanations | Yes — optimizer unit tests, smoke decision flow, API decision creation/execution | No — frontend has no optimization screen; its POST /optimization/plan does not exist backend-side | UI integration; frontend "plan" contract | PARTIAL |
+| 2 | LLM Runtime & Execution Engine | Yes — LlamaCppAdapter (lazy, real), FakeRuntimeAdapter (test-only), registry, locks, OOM/timeout handling | Yes — REAL model load/generate verified through the API today (Qwen2.5-0.5B Q4_K_M, llama.cpp 0.3.36, CPU); mocked adapter contract tests; integration test skips cleanly | No — no UI path loads a model or runs inference | UI integration; GPU offload unavailable on this build (CPU-only llama.cpp) | PARTIAL |
+| 3 | Configuration Mgmt, Storage & Experiment History | Yes — configurations/workloads CRUD + revisions, 11 tables, JSONL import/export, history endpoints | Yes — 122 tests, fresh Alembic upgrade (12 tables), persistence across requests verified via API flows | No — frontend "Model Lab"/"Experiments" screens are placeholders | UI integration | PARTIAL |
+| 4 | Benchmarking & Performance Measurement | Yes — warmups, raw repetitions, measured/derived/unavailable metric statuses, TTFT, tokenizer-sourced token counts, quality evaluator registry | Yes — REAL benchmark through the API today (latency 468 ms, TTFT 33.9 ms, test_only=false) + fake-runtime smoke + statistics tests | No — frontend trends/experiments screens use fixtures | UI integration | PARTIAL |
+| 5 | FastAPI, Job Orchestration & System Integration | Yes — 37 paths, structured error envelope, bounded queue with capacity reservation, restart recovery, CORS for Tauri/Vite origins | Yes — live server probes (all backend routes 200), smoke E2E, 122 tests | BROKEN — the frontend calls a different contract; only /health matches | Contract bridge (see P0) | PARTIAL |
+
+No section is NOT IMPLEMENTED. No section earns COMPLETE overall only because frontend
+integration is missing or broken in every one of them. The backend halves are all COMPLETE
+in isolation.
+
+
+D. FRONTEND-TO-BACKEND INTEGRATION MATRIX
+-----------------------------------------
+Base URL resolution (client.ts): VITE_API_BASE_URL → VITE_BACKEND_URL+/api/v1 → default
+http://127.0.0.1:8000/api/v1. CORS on the backend already allows localhost:5173 and Tauri
+origins, so transport is fine; the PATHS and SHAPES are not.
+
+| Screen / workflow | What the user can do today | Status | Endpoint called (method, path) | Endpoint exists? | Contract match | Data source | Needed work |
+|---|---|---|---|---|---|---|---|
+| Overview — connection pill | See real backend reachability, latency; click to refresh; polls every 20 s | Functional | GET /api/v1/health (fallback GET /health) | Yes (200) | Yes | Live backend | None |
+| Overview — 3D configuration lattice, legend, selected-config inspector, metrics strip, recent experiments table, trends chart | Interact with all widgets | Visual-only (mock data) | GET /profiles, /metrics/overview, /experiments, /system/status, /trends | All 404 | No — paths absent; response shapes are camelCase (memoryUsageGb…) vs backend snake_case (peak_process_rss_mb…) | demoData.ts fixtures (or "stale live cache" if a previous cycle succeeded) | Bridge endpoints or rewrite client mapping (P0/P1) |
+| Overview — "optimization plan" client method | Nothing — no component invokes it | Wired but unused | POST /api/v1/optimization/plan | No — 405 (only GET /optimization/{id} matches) | No — request {modelName,memoryBudgetGb,maxLatencyMs,objective} vs backend OptimizationCreate {workload_id,candidate_configuration_ids,constraints[]}; response {selectedCandidateId,rationale,candidateProfiles} vs DecisionRead | Would fabricate a canned answer when offline | Replace with real decision flow (P1) |
+| Overview — Ctrl+K search, arrow-key candidate nav, filters | Filter/select candidates | Functional on fixture data | none (client-side) | n/a | n/a | demo fixtures | Re-point at bridged data |
+| Model Lab | View placeholder card only | Placeholder | none | n/a | n/a | none | Build screen on /configurations (P1) |
+| Optimization Lab | View placeholder card only | Placeholder | none | n/a | n/a | none | Build screen on /optimization/decisions (P1) |
+| Experiments | View placeholder card only | Placeholder | none | n/a | n/a | none | Build screen on /history + /benchmarks (P1) |
+| Settings | View placeholder card only | Placeholder | none | n/a | n/a | none | Build screen on /capabilities + /ready (P1) |
+| Tauri desktop shell | Window, fullscreen, shell:allow-open | Implemented | n/a | n/a | n/a | n/a | CSP is null; fine for local research use |
+
+EXECUTED PROOF (live backend on 127.0.0.1:8137, isolated temp DB, fake runtime enabled):
+  GET  /api/v1/health              -> 200
+  GET  /api/v1/system/status       -> 404
+  GET  /api/v1/profiles            -> 404
+  GET  /api/v1/experiments         -> 404
+  GET  /api/v1/metrics/overview    -> 404
+  GET  /api/v1/trends              -> 404
+  POST /api/v1/optimization/plan   -> 405
+  GET  /api/v1/capabilities        -> 200
+  GET  /api/v1/configurations      -> 200
+  GET  /api/v1/workloads           -> 200
+  GET  /api/v1/benchmarks          -> 200
+  GET  /api/v1/optimization/decisions -> 200
+  GET  /api/v1/history             -> 200
+  GET  /api/v1/jobs                -> 200
+
+Important provenance trap: because only /health must succeed for
+`backendState.connected=true`, the UI will display "Backend Connected" and label the data
+"LIVE BACKEND" while every data widget is still showing demo fixtures. The demo/live badge
+cannot currently be trusted.
+
+
+E. API INVENTORY (backend, ground truth from generated OpenAPI — 37 paths)
+--------------------------------------------------------------------------
+All verified reachable (200) on a live server during this audit unless noted.
+
+Health & discovery
+  GET  /api/v1/health                    liveness; uptime; no runtime needed
+  GET  /api/v1/ready                     DB check + runtime/job/optimizer status; 503 if DB bad
+  GET  /api/v1/capabilities              adapters + hardware snapshot + metric catalogue + limitations
+  GET  /health, GET /ready               root aliases (same handlers)
+
+Configurations (persisted, revisioned)
+  POST /api/v1/configurations            201 create (model path validated against model roots)
+  GET  /api/v1/configurations            paginated list
+  GET  /api/v1/configurations/{id}       read
+  PATCH /api/v1/configurations/{id}      update (creates revision)
+  DELETE /api/v1/configurations/{id}     delete
+  POST /api/v1/configurations/{id}/validate   preflight validation (advisory/strict)
+  GET  /api/v1/configurations/{id}/revisions  revision history
+  POST /api/v1/configurations/import     JSON import (bounded records, allowlist)
+  GET  /api/v1/configurations/export     JSON export envelope
+  POST /api/v1/import/configurations, GET /api/v1/export/configurations   aliases
+
+Workloads
+  POST/GET /api/v1/workloads, GET/PATCH/DELETE /api/v1/workloads/{id}
+
+Benchmarks
+  POST /api/v1/benchmarks                202 submit → job_id + benchmark_run_id
+  GET  /api/v1/benchmarks                list runs
+  GET  /api/v1/benchmarks/{run_id}       detail incl. metric summaries + snapshots
+  GET  /api/v1/benchmarks/{run_id}/measurements   raw repetitions (warmup + measured)
+  POST /api/v1/benchmarks/{run_id}/cancel queued-only cancellation
+  GET  /api/v1/benchmarks/compare        compatibility-checked comparison
+
+Optimization
+  POST /api/v1/optimization/decisions    201 from evidence or 202 if fresh benchmarking queued
+  POST /api/v1/optimization              alias of the above
+  GET  /api/v1/optimization/decisions    list; GET /{decision_id} read (also alias)
+  POST /api/v1/optimization/decisions/{id}/execute   202 execute SELECTED decision only
+
+Inference
+  POST /api/v1/inference                 202 → execution_id + job_id (real generation)
+  GET  /api/v1/inference, /{execution_id}  list / read (retains metrics; prompt NOT stored by default)
+
+Jobs
+  GET  /api/v1/jobs, /{job_id}           status polling (queued/running/completed/failed/cancelled/interrupted)
+
+History
+  GET  /api/v1/history, /summary, /compare
+  GET  /api/v1/history/benchmarks/{run_id}, /decisions/{id}, /inference/{id}, /configurations/{id}
+  GET  /api/v1/history/export            NDJSON export (parseable, test-only excluded by default)
+
+Security/privacy properties (verified in code): absolute model paths are stored but the path
+policy confines configuration paths to configured model roots; prompts are not persisted
+unless retention is explicitly enabled (default off); fake-runtime runs are tagged test_only
+and excluded from exports/optimization by default; error envelopes carry stable codes.
+
+
+F. DATABASE AND PERSISTENCE AUDIT
+---------------------------------
+Engine: SQLite via SQLAlchemy 2 ORM; single Alembic revision cab7b3235e59 (initial schema).
+11 application tables (verified by fresh `alembic upgrade head` into an isolated DB —
+PASS, 12 tables incl. alembic_version):
+
+  configurations → configuration_revisions (1:N, unique (configuration_id, revision))
+  workloads      → workload_revisions
+  jobs           (status machine; interrupted rows recovered at startup)
+  benchmark_runs → benchmark_measurements (raw reps), benchmark_metric_summaries
+  optimization_decisions → decision_candidates (per-candidate constraint results, scores)
+  inference_executions
+
+Startup uses Base.metadata.create_all() as a development convenience (documented); Alembic
+is the explicit reproducibility path. UTC timestamps are enforced by a custom UTCDateTime
+TypeDecorator.
+
+Observed data state:
+  Backend/data/lattice.db        schema present, 0 rows (clean dev DB)
+  Backend/data/smoke_check.db    smoke artifact, gitignored
+  Backend/lattice-real-validation.db (+wal/shm, untracked) — contains 1 REAL completed
+    benchmark run: llamacpp 0.3.36, cpu/AVX, model Qwen2.5-0.5B-Instruct-Q4_K_M.gguf
+    (397,808,192 bytes), 3/3 successful reps + 1 warmup, test_only=0, tokenizer-sourced
+    token counts (8 in / 10 out), TTFT ~31 ms, latency ~282 ms mean, GPU metrics
+    correctly "unavailable" with reasons, quality "unavailable" (no evaluator configured).
+    This is the persisted evidence that a real model was benchmarked on 2026-10-21.
+
+Gaps/risks: only one migration revision exists, so "upgrade from prior schema" cannot be
+exercised; in-process jobs are non-durable by design (restart marks them interrupted —
+documented, acceptable for this scope); the real-validation DB is untracked scratch and
+should be copied into experiments/ or exported if it is meant to be research evidence.
+
+
+G. RUNTIME AND BENCHMARK AUDIT
+------------------------------
+Execution path: POST /benchmarks → job queued (bounded, capacity reserved BEFORE the row is
+persisted) → worker resolves adapter via RuntimeRegistry → LlamaCppAdapter lazily imports
+llama_cpp → loads model under a per-key lock → streams generation (TTFT from first streamed
+token) → raw measurement rows (warmup kept, excluded from aggregates) → metric summaries with
+explicit status/method/reason → run persisted with configuration/workload/protocol snapshots.
+
+REAL INFERENCE — VERIFIED IN THIS AUDIT (isolated temp DB, real llama.cpp, local GGUF):
+  POST /api/v1/configurations  201
+  POST /api/v1/inference       202 → job completed, 8 real output tokens, test_only=false
+  POST /api/v1/benchmarks      202 → run completed in 2.6 s wall:
+      latency_ms    measured, mean 468.10 ms
+      ttft_ms       measured, mean 33.87 ms
+      output_tokens 16 (tokenizer-sourced), peak_rss 576.9 MB
+      GPU memory    "unavailable — GPU telemetry disabled by configuration" (honest null)
+      quality       "unavailable" (no evaluator configured)
+No numbers were fabricated; unavailable metrics stay null with reasons.
+
+Metric semantics (code + persisted run evidence): end-to-end throughput and decode
+throughput are named and computed from their exact denominators; per-token metrics are
+suppressed when token counts are 0/unavailable; device-wide GPU telemetry is never labeled
+process-attributed; timeout/failure durations are stored separately from success samples.
+Known limitation (documented in capabilities): native llama.cpp decode is not preemptible —
+timeouts are enforced between streamed chunks, and cancellation is queued-only.
+
+Mock vs real is rigorously separated: FakeRuntimeAdapter is registered only when
+LATTICE_RUNTIME_ALLOW_FAKE=true, its runs are tagged test_only, excluded from list/export
+endpoints by default, and rejected as optimization evidence unless explicitly opted in.
+
+
+H. OPTIMIZATION AUDIT
+---------------------
+What it genuinely does today (app/optimization/baseline.py, "baseline-feasibility-v1"):
+ 1. Evidence selection: a candidate is evaluated only against a compatible, sufficiently
+   fresh (max_age_hours), allowed-status benchmark run with >= min successful repetitions.
+   Test-only evidence is rejected by default. Incompatibility, staleness, missing runs and
+   too-few repetitions each produce a distinct persisted rejection code.
+ 2. Hard constraints gate selection: each constraint (<=, >=, ==) is evaluated independently
+   with unit checking; a unit mismatch or missing/estimated metric yields UNKNOWN (never a
+   pass); any FAIL makes the candidate infeasible regardless of score.
+ 3. Deterministic ranking: min-max normalization of objective metrics across eligible
+   candidates, weights normalized to sum 1, lower score wins, ties break on configuration id.
+   Objectives: minimize_latency, maximize_throughput, or weighted score.
+ 4. No candidate ⇒ NO_FEASIBLE_CANDIDATE or INSUFFICIENT_EVIDENCE with a persisted reason;
+   it never returns a fallback. Execution endpoints accept only a selected, feasible decision
+   and validate actual results against the decision's constraints (missing actual metrics →
+   not_evaluated, not pass).
+
+This is real constraint-based optimization over persisted benchmark evidence — NOT
+placeholders or hardcoded results. What it is NOT: no online/adaptive learning, no Pareto
+front computed server-side (the frontend's "Pareto" filter is a client-side
+qualityScore>=85 heuristic on fixture data), no multi-objective search beyond the weighted
+baseline. Those are honest scope limits, documented as future work.
+
+
+I. TEST RESULTS (commands executed in this audit)
+-------------------------------------------------
+All commands run from the directory stated. PASS/FAIL/BLOCKED/NOT RUN recorded honestly.
+
+| Command (cwd) | Result | Detail |
+|---|---|---|
+| Backend: ./.venv/Scripts/python.exe -m pytest tests/ -q | PASS | 122 passed, 1 skipped in 16.4 s |
+| Backend: pytest tests/test_llamacpp_integration.py -v | BLOCKED (by design) | SKIPPED — LATTICE_REAL_MODEL_PATH not set; skip reason is clear. No test downloaded a model. |
+| Backend: real-model API flow (isolated temp DB, real llama.cpp + local GGUF) | PASS | inference completed 8 tokens; benchmark completed, latency 468 ms / TTFT 33.9 ms, test_only=false |
+| Backend: ./.venv/Scripts/python.exe -m ruff check . | PASS | "All checks passed!" |
+| Backend: ./.venv/Scripts/python.exe -m ruff format --check . | PASS | 97 files already formatted |
+| Backend: python scripts/smoke_fake_runtime.py | PASS | exit 0; full flow config→workload→benchmark→decision→execute→export on temp DB |
+| Backend: alembic upgrade head (isolated temp DB) | PASS | 12 tables created, version cab7b3235e59 |
+| Backend: live uvicorn + curl route probes | PASS | see §D/§E status codes |
+| Frontend: cmd /c "npm run build" | PASS | exit 0; tsc -b clean; 2776 modules; dist/ emitted (2.3 MB JS, chunk-size warning) |
+| Frontend: npm run build under Git Bash | FAIL (environment) | exit 1 with no output; NOT a code defect — same build passes under cmd. Git Bash/Node shim quirk; document cmd or PowerShell as the supported shell. |
+| Frontend: tauri build (cargo) | NOT RUN | heavy Rust toolchain build; not attempted |
+| Backend: mypy/type checks | NOT RUN | not configured in the project (Ruff only) |
+
+Repo hygiene: `git status --short` after all work shows ONLY the owner's pre-existing
+Frontend package.json/lock changes. No source, config, DB, or model files were added,
+modified, deleted, or committed by this audit. The only file created is this report.
+
+
+J. PRIORITIZED MISSING-WORK LIST
+--------------------------------
+P0 — Blocking defect preventing end-to-end operation through the UI
+  * [Frontend/src/lib/api/client.ts, apiContract.ts; Backend app/api/routes/*] The frontend
+    calls /system/status, /profiles, /experiments, /metrics/overview, /trends,
+    /optimization/plan — none exist (404/405). Acceptance: with both apps running, every
+    Overview widget renders data derived from real backend rows (configurations, benchmark
+    runs, decisions), the data-source badge is truthful, and no fixture can masquerade as
+    live. Test: start backend + `npm run dev`, assert network panel shows only existing
+    paths and widgets populate after creating a real configuration + benchmark.
+
+P1 — Required for functional completeness
+  * Bridge contract (choose ONE, recommended = A):
+    A) Add a thin read-model/aggregate layer in the backend exposing the 7 frontend
+       contract endpoints (GET profiles→configurations+latest-run metrics; experiments→
+       /history runs; metrics/overview→latest aggregates; trends→time series from runs;
+       system/status→/capabilities; POST plan→/optimization/decisions). Reuses all
+       existing services; preserves the polished UI untouched. Each endpoint must derive
+       from persisted rows and mark test_only data.
+    B) Rewrite the frontend client to map directly onto the real snake_case endpoints.
+       Touches only client.ts/types but risks churn across Overview widgets.
+  * Model Lab screen on /configurations (list/create/validate/inspect revisions).
+  * Experiments screen on /history + /benchmarks (runs, raw reps, compare, JSONL export).
+  * Optimization Lab on /optimization/decisions (create with constraints, inspect
+    per-candidate rejections, execute selected).
+  * Settings on /capabilities + /ready (runtime adapters, hardware, feature flags).
+  * Replace the offline fabricated optimization response in client.ts with an explicit
+    "offline — cannot plan" state.
+
+P2 — Reliability, reproducibility, validation
+  * Fix the truthfulness of the data-source badge (currently "Live Backend" while fixtures
+    render) regardless of which bridge option is chosen.
+  * Preserve/copy Backend/lattice-real-validation.db evidence into experiments/ (or export
+    JSONL) instead of leaving it as untracked scratch.
+  * Document Git Bash incompatibility for `npm run build`; standardize on cmd/PowerShell.
+  * Verify Tauri desktop build (cargo) once, offline.
+  * Consider Alembic downgrade/upgrade test scaffolding as a second revision appears.
+
+P3 — Optional improvements
+  * Code-split the 2.3 MB vendor bundle (Three.js + ECharts) via dynamic import.
+  * Remove tracked frontend/tsconfig.tsbuildinfo build artifact.
+  * Normalize the git path casing frontend/ vs Frontend/ for case-sensitive clones.
+  * Delete the duplicate 398 MB GGUF under models/qwen2.4-0.5B (mislabeled dir) to halve
+    disk usage — owner decision, file is gitignored either way.
+  * Install nvidia-ml-py (optional 'gpu' extra) if GPU telemetry is later needed.
+
+
+K. RECOMMENDED IMPLEMENTATION SEQUENCE (smallest coherent path)
+----------------------------------------------------------------
+1. Bridge layer (P0 + the badge fix): implement Option A — seven aggregate GET endpoints plus
+   the plan→decision mapping in the backend, each backed by existing services
+   (configurations, history, comparison, optimization). No schema changes, no new tables.
+2. Contract tests for the bridge: assert each bridged endpoint's shape against the frontend's
+   TypeScript interfaces, including the empty-state (no runs yet) case.
+3. Point the frontend at the bridge: minimal edits to client.ts only (paths + field mapping).
+   Do not touch OverviewPage or the 3D components.
+4. Build the four screens incrementally against real endpoints: Experiments first (data
+   already exists), then Model Lab, Optimization Lab, Settings.
+5. Optional desktop packaging pass (Tauri) after the web flow is proven.
+
+REUSE UNCHANGED: the entire Backend/ (all services, optimizer, runtime adapters, job
+manager, schemas, migrations, tests) and all Frontend visual components
+(OverviewPage, lattice3d/, overview widgets, Sidebar, Header, styling).
+TARGETED FIX ONLY: Frontend/src/lib/api/client.ts (+ types/index.ts mapping), plus the new
+backend bridge module and its tests. GENUINELY NEW WORK: the four placeholder screens.
+
+
+L. AGENT HANDOFF SUMMARY
+------------------------
+1. WHAT ALREADY WORKS (verified by execution — do not rebuild):
+   - Entire backend API (37 paths), persistence (11 tables + Alembic), bounded job queue
+     with restart recovery, deterministic hard-constraint optimizer, benchmark engine with
+     honest metric provenance, JSONL export, fake-runtime smoke test, and REAL llama.cpp
+     inference + benchmarking on the local Qwen2.5-0.5B GGUF (verified through the API
+     today; llama-cpp-python 0.3.36 installed in Backend/.venv).
+   - 122 passing tests; Ruff clean; frontend builds under cmd.
+2. PARTIALLY IMPLEMENTED: the frontend Overview screen (real widgets, but fed by fixtures;
+   connection pill is the only live element). The optimization "plan" client method exists
+   but no UI invokes it and the backend route does not exist.
+3. MISSING: the 7 contract endpoints (or an equivalent client rewrite), and the four
+   placeholder screens (Model Lab, Optimization Lab, Experiments, Settings).
+4. BROKEN: frontend↔backend contract mismatch (404/405 on every data endpoint) and the
+   misleading "Live Backend" badge over fixture data. Git Bash `npm run build` exit-1 is an
+   environment quirk, not code.
+5. INTEGRATION NEEDED: P0 bridge (recommended: backend aggregate endpoints matching
+   docs/api-contract.md shapes, derived from real rows, test_only respected) + client.ts
+   remap + four screens on real endpoints.
+6. EXACT PRIORITY CHECKLIST: (1) bridge endpoints + badge truthfulness; (2) contract tests;
+   (3) client.ts remap; (4) Experiments screen; (5) Model Lab; (6) Optimization Lab;
+   (7) Settings; (8) offline plan state; (9) preserve real-run evidence; (10) Tauri build
+   verification.
+7. END-TO-END ACCEPTANCE TESTS THAT MUST PASS BEFORE DECLARING COMPLETION:
+   a) Start backend (uvicorn, port 8000, temp or dev DB) + frontend dev server; open UI.
+   b) Create a configuration pointing at the local GGUF through the UI; see it listed from
+      the database (refresh proves persistence).
+   c) Submit a benchmark from the UI; poll until completed; see real latency/TTFT/token
+      numbers (not fixtures) with warmup excluded and test_only=false.
+   d) Request an optimization decision with latency + memory constraints; see per-candidate
+      feasible/rejected explanations; execute the selected decision; see inference output
+      metrics and validation status.
+   e) Open Experiments; compare two runs; export JSONL and parse every line.
+   f) Restart the backend; history and decisions survive; interrupted work (if any) is
+      marked interrupted, never silently duplicated.
+   g) Toggle the backend off: UI shows a truthful "offline" state and NEVER fabricates
+      optimization results.
+   h) Backend test suite green (122+ tests), Ruff clean, `git diff --check` clean.
+
+END OF AUDIT REPORT

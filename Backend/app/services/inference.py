@@ -20,6 +20,7 @@ from app.core.errors import (
     NotFoundError,
     ValidationFailure,
 )
+from app.core.idempotency import idempotency_lock
 from app.core.logging import get_logger
 from app.core.settings import Settings
 from app.core.time import monotonic, new_id, utcnow
@@ -29,6 +30,7 @@ from app.db.session import session_scope
 from app.jobs.manager import JobManager
 from app.repositories import decisions as decision_repo
 from app.repositories import inference as repo
+from app.repositories import jobs as job_repo
 from app.runtime.base import GenerationRequest
 from app.runtime.locks import RuntimeLockManager
 from app.runtime.registry import RuntimeRegistry
@@ -68,11 +70,25 @@ class InferenceService:
         *,
         decision_id: str | None = None,
     ) -> InferenceAccepted:
+        # One critical section per idempotency key: check-and-create must be atomic.
+        with idempotency_lock(JobType.INFERENCE.value, request_id):
+            return self._create_locked(payload, request_id=request_id, decision_id=decision_id)
+
+    def _create_locked(
+        self,
+        payload: InferenceCreate,
+        request_id: str | None = None,
+        *,
+        decision_id: str | None = None,
+    ) -> InferenceAccepted:
+        linked_decision_id = decision_id or payload.decision_id
+        replay = self._replay(request_id, payload, linked_decision_id)
+        if replay is not None:
+            return replay
         configuration_service = ConfigurationService(
             self.session, self.settings, runtime_registry=self.runtime_registry
         )
         configuration = None
-        linked_decision_id = decision_id or payload.decision_id
         if payload.configuration_id:
             configuration = configuration_service.get(payload.configuration_id)
         elif linked_decision_id:
@@ -189,6 +205,58 @@ class InferenceService:
             ),
         )
 
+    def _replay(
+        self,
+        request_id: str | None,
+        payload: InferenceCreate,
+        linked_decision_id: str | None,
+    ) -> InferenceAccepted | None:
+        """Return the persisted execution for a repeated ``X-Request-ID``.
+
+        The request id is an idempotency key for the submitted work.  Prompts are
+        deliberately not persisted, so a replay cannot compare them; it compares
+        the resolved target (configuration and/or decision) instead.
+        """
+        if not request_id:
+            return None
+        job = job_repo.find_by_request(
+            self.session, job_type=JobType.INFERENCE.value, request_id=request_id
+        )
+        if job is None:
+            return None
+        execution = repo.get(self.session, job.resource_id) if job.resource_id else None
+        if execution is None:
+            raise ConflictError(
+                "this request id is already recorded for an inference job without an execution",
+                details={"request_id": request_id, "job_id": job.id},
+            )
+        mismatched: dict[str, Any] = {}
+        if payload.configuration_id and execution.configuration_id != payload.configuration_id:
+            mismatched["existing_configuration_id"] = execution.configuration_id
+        if linked_decision_id and execution.decision_id != linked_decision_id:
+            mismatched["existing_decision_id"] = execution.decision_id
+        if mismatched:
+            raise ConflictError(
+                "this request id was already used for a different inference submission",
+                details={
+                    "request_id": request_id,
+                    "existing_inference_execution_id": execution.id,
+                    **mismatched,
+                },
+            )
+        return InferenceAccepted(
+            execution_id=execution.id,
+            job_id=job.id,
+            status=execution.status,
+            output_retention_policy=execution.output_retention_policy,
+            test_only=execution.test_only,
+            duplicate=True,
+            message=(
+                f"Duplicate submission replayed: inference execution {execution.id} already "
+                f"exists for this X-Request-ID (status '{execution.status}')."
+            ),
+        )
+
     # ------------------------------------------------------------------
     def execute(self, execution_id: str) -> None:
         adapter = None
@@ -242,6 +310,7 @@ class InferenceService:
                 )
                 prompt = None  # prompts are intentionally not persisted
                 execution.runtime_metadata = runtime_metadata
+                execution_decision_id = execution.decision_id
                 session.flush()
 
             # The prompt is supplied to the worker through the execution request
@@ -279,7 +348,10 @@ class InferenceService:
                 sampling_interval_ms=self.settings.memory_sampling_interval_ms,
                 gpu_collector=None,
             )
-            constraints = self._decision_constraints(execution.decision_id)
+            # Constraint evaluation must not reuse a request/worker session: the
+            # execution runs on a worker thread, so open a short-lived session.
+            with session_scope(self.session_factory) as session:
+                constraints = self._decision_constraints(session, execution_decision_id)
             constraint_results, validation_status = self._validate_constraints(constraints, draft)
             with session_scope(self.session_factory) as session:
                 execution = repo.get(session, execution_id)
@@ -403,10 +475,11 @@ class InferenceService:
         if system_prompt:
             _SYSTEM_PROMPTS[execution_id] = system_prompt
 
-    def _decision_constraints(self, decision_id: str | None) -> list[dict[str, Any]]:
+    @staticmethod
+    def _decision_constraints(session: Session, decision_id: str | None) -> list[dict[str, Any]]:
         if not decision_id:
             return []
-        decision = decision_repo.get(self.session, decision_id)
+        decision = decision_repo.get(session, decision_id)
         if decision is None:
             return []
         return list((decision.constraint_specification or {}).get("constraints", []))

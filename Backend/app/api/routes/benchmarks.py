@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.api.deps import (
     PageParams,
@@ -35,9 +35,11 @@ router = APIRouter(prefix="/benchmarks", tags=["Benchmarks"])
 )
 def submit_benchmark(
     payload: BenchmarkCreate,
+    request: Request,
     service: BenchmarkService = Depends(get_benchmark_service),
 ) -> BenchmarkAccepted:
-    return service.submit(payload)
+    # X-Request-ID is an idempotency key: a replay returns the original run.
+    return service.submit(payload, request_id=request.state.request_id)
 
 
 @router.get("", response_model=BenchmarkRunPage)

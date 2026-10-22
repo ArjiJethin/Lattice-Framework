@@ -40,6 +40,9 @@ class InferenceAccepted(APIModel):
     output_retention_policy: str
     test_only: bool = False
     message: str
+    #: True when an ``X-Request-ID`` replay returned an already-persisted
+    #: execution instead of creating a second one.
+    duplicate: bool = False
 
 
 class InferenceRead(APIModel):

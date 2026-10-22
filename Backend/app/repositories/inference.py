@@ -47,6 +47,23 @@ def count(session: Session) -> int:
     return int(session.scalar(select(func.count()).select_from(InferenceExecution)) or 0)
 
 
+def for_decision(
+    session: Session, decision_id: str, *, limit: int = 20
+) -> list[InferenceExecution]:
+    """Executions submitted for a decision, newest first.
+
+    A decision may legitimately be executed more than once; the outcome view
+    reports the latest attempt and counts the rest.
+    """
+    stmt = (
+        select(InferenceExecution)
+        .where(InferenceExecution.decision_id == decision_id)
+        .order_by(InferenceExecution.created_at.desc(), InferenceExecution.id.desc())
+        .limit(limit)
+    )
+    return list(session.scalars(stmt).all())
+
+
 def for_configuration(
     session: Session, configuration_id: str, *, limit: int = 50
 ) -> list[InferenceExecution]:

@@ -38,6 +38,7 @@ from app.core.errors import (
     NotFoundError,
     ValidationFailure,
 )
+from app.core.idempotency import idempotency_lock
 from app.core.logging import get_logger
 from app.core.settings import Settings
 from app.core.time import content_hash, monotonic, new_id, utcnow
@@ -52,6 +53,7 @@ from app.db.session import session_scope
 from app.hardware.service import HardwareService
 from app.jobs.manager import JobManager
 from app.repositories import benchmarks as repo
+from app.repositories import jobs as job_repo
 from app.runtime.base import (
     BaseRuntimeAdapter,
     GenerationRequest,
@@ -117,7 +119,15 @@ class BenchmarkService:
     # Submission
     # ------------------------------------------------------------------
     def submit(self, payload: BenchmarkCreate, request_id: str | None = None) -> BenchmarkAccepted:
-        job_id, run_id, test_only = self.provision(payload, request_id=request_id, schedule=True)
+        # Replay check and insert must be one critical section, otherwise two
+        # concurrent requests with the same key both see "no run yet".
+        with idempotency_lock(JobType.BENCHMARK.value, request_id):
+            replay = self._replay(request_id, payload)
+            if replay is not None:
+                return replay
+            job_id, run_id, test_only = self.provision(
+                payload, request_id=request_id, schedule=True
+            )
         return BenchmarkAccepted(
             job_id=job_id,
             benchmark_run_id=run_id,
@@ -131,6 +141,51 @@ class BenchmarkService:
                 )
             ),
             test_only=test_only,
+        )
+
+    def _replay(self, request_id: str | None, payload: BenchmarkCreate) -> BenchmarkAccepted | None:
+        """Return an existing accepted submission for a repeated ``X-Request-ID``.
+
+        A repeated key that targets a different configuration/workload is a
+        client error, not a replay: silently returning another run's ids would
+        make two different experiments look like one.
+        """
+        if not request_id:
+            return None
+        job = job_repo.find_by_request(
+            self.session, job_type=JobType.BENCHMARK.value, request_id=request_id
+        )
+        if job is None:
+            return None
+        run = repo.get_run(self.session, job.resource_id) if job.resource_id else None
+        if run is None:
+            raise ConflictError(
+                "this request id is already recorded for a benchmark job without a run",
+                details={"request_id": request_id, "job_id": job.id},
+            )
+        if (
+            run.configuration_id != payload.configuration_id
+            or run.workload_id != payload.workload_id
+        ):
+            raise ConflictError(
+                "this request id was already used for a different benchmark submission",
+                details={
+                    "request_id": request_id,
+                    "existing_benchmark_run_id": run.id,
+                    "existing_configuration_id": run.configuration_id,
+                    "existing_workload_id": run.workload_id,
+                },
+            )
+        return BenchmarkAccepted(
+            job_id=job.id,
+            benchmark_run_id=run.id,
+            status=run.status,
+            test_only=run.test_only,
+            duplicate=True,
+            message=(
+                f"Duplicate submission replayed: benchmark run {run.id} already exists for "
+                f"this X-Request-ID (status '{run.status}')."
+            ),
         )
 
     def provision(
