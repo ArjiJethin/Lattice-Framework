@@ -8,13 +8,44 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
+from app.core.idempotency import is_job_idempotency_conflict
+from app.db.models import Job
 from tests.conftest import wait_for_job
 
 
 def _benchmark_payload(configuration: dict, workload: dict) -> dict:
     return {"configuration_id": configuration["id"], "workload_id": workload["id"]}
+
+
+def test_job_idempotency_constraint_scopes_keys_and_allows_nulls(client: TestClient):
+    factory = client.app.state.container.session_factory
+    with factory() as session:
+        session.add_all(
+            [
+                Job(id="null-job-1", job_type="benchmark", request_id=None),
+                Job(id="null-job-2", job_type="benchmark", request_id=None),
+                Job(id="type-job-1", job_type="benchmark", request_id="shared-key"),
+                Job(id="type-job-2", job_type="inference", request_id="shared-key"),
+            ]
+        )
+        session.commit()
+
+        session.add(Job(id="duplicate-job", job_type="benchmark", request_id="shared-key"))
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        assert session.query(Job).count() == 4
+
+
+def test_unrelated_integrity_errors_are_not_idempotency_conflicts():
+    assert not is_job_idempotency_conflict(
+        IntegrityError("insert", {}, ValueError("UNIQUE constraint failed: configurations.name"))
+    )
 
 
 def test_repeated_request_id_replays_benchmark_submission(

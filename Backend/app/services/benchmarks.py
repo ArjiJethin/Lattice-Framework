@@ -11,6 +11,7 @@ import platform
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.benchmarking.metrics import (
@@ -38,7 +39,7 @@ from app.core.errors import (
     NotFoundError,
     ValidationFailure,
 )
-from app.core.idempotency import idempotency_lock
+from app.core.idempotency import idempotency_lock, is_job_idempotency_conflict
 from app.core.logging import get_logger
 from app.core.settings import Settings
 from app.core.time import content_hash, monotonic, new_id, utcnow
@@ -125,7 +126,7 @@ class BenchmarkService:
             replay = self._replay(request_id, payload)
             if replay is not None:
                 return replay
-            job_id, run_id, test_only = self.provision(
+            job_id, run_id, test_only, duplicate = self.provision(
                 payload, request_id=request_id, schedule=True
             )
         return BenchmarkAccepted(
@@ -141,6 +142,7 @@ class BenchmarkService:
                 )
             ),
             test_only=test_only,
+            duplicate=duplicate,
         )
 
     def _replay(self, request_id: str | None, payload: BenchmarkCreate) -> BenchmarkAccepted | None:
@@ -194,7 +196,7 @@ class BenchmarkService:
         *,
         request_id: str | None = None,
         schedule: bool = True,
-    ) -> tuple[str, str, bool]:
+    ) -> tuple[str, str, bool, bool]:
         """Validate and persist a job+run.
 
         ``schedule=False`` is used by the optimization worker, which executes the
@@ -265,13 +267,23 @@ class BenchmarkService:
             repo.create_run(self.session, run)
             job.resource_id = run.id
             self.session.commit()
+        except IntegrityError as exc:
+            self.session.rollback()
+            if schedule:
+                self.job_manager.release()
+            if not request_id or not is_job_idempotency_conflict(exc):
+                raise
+            replay = self._replay(request_id, payload)
+            if replay is None:
+                raise
+            return replay.job_id, replay.benchmark_run_id, replay.test_only, True
         except Exception:
             self.session.rollback()
             if schedule:
                 self.job_manager.release()
             raise
         if not schedule:
-            return job.id, run.id, adapter.is_test_runtime
+            return job.id, run.id, adapter.is_test_runtime, False
         try:
             self.job_manager.submit(job.id, JobType.BENCHMARK.value, run.id)
         except Exception as exc:
@@ -289,7 +301,7 @@ class BenchmarkService:
                         error_message=safe_failure(exc)[1],
                     )
             raise
-        return job.id, run.id, adapter.is_test_runtime
+        return job.id, run.id, adapter.is_test_runtime, False
 
     def _build_protocol(
         self,

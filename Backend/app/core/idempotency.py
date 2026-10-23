@@ -8,12 +8,9 @@ either commits - so check-and-create runs inside a per-key critical section.
 
 Scope and limits (deliberate, documented):
 
-* The lock is **process-local**.  Lattice's job manager is a single-process,
-  in-process worker pool (see ``app/jobs/manager.py``), so a per-process lock is
-  exactly the right granularity today.  A future multi-process/worker deployment
-  would additionally need a database uniqueness constraint on
-  ``(job_type, request_id)``; that is not added here because it would reject the
-  duplicate rows a previous build could already have written.
+* The lock is **process-local**, while the database also enforces uniqueness on
+  ``(job_type, request_id)`` for non-null keys.  The database constraint is the
+  cross-process safety net; callers recover its narrow conflict as a replay.
 * Different keys never block each other.
 * A ``None`` key is a no-op, so callers without an idempotency key keep their
   previous behaviour.
@@ -71,4 +68,22 @@ def active_lock_count() -> int:
         return len(_locks)
 
 
-__all__ = ["active_lock_count", "idempotency_lock"]
+def is_job_idempotency_conflict(exc: BaseException) -> bool:
+    """Return whether an integrity error is the jobs idempotency uniqueness rule."""
+    current: BaseException | None = exc
+    while current is not None:
+        constraint_name = getattr(getattr(current, "orig", None), "diag", None)
+        constraint_name = getattr(constraint_name, "constraint_name", None)
+        if constraint_name == "uq_jobs_job_type_request_id":
+            return True
+        message = str(getattr(current, "orig", current)).lower()
+        if (
+            "unique constraint failed: jobs.job_type, jobs.request_id" in message
+            or "uq_jobs_job_type_request_id" in message
+        ):
+            return True
+        current = getattr(current, "__cause__", None)
+    return False
+
+
+__all__ = ["active_lock_count", "idempotency_lock", "is_job_idempotency_conflict"]
