@@ -1,184 +1,310 @@
 # Lattice Framework
 
-Lattice is an optimization and experimentation framework designed for local LLM inference, benchmarking, and runtime configuration profiling.
+**Lattice** is an optimization and experimentation framework designed for local Large Language Model (LLM) inference, multi-objective benchmarking, and runtime configuration profiling.
 
-> **Status: backend vertical slice implemented (Sections 4–6).**
-> SQLite persistence, the versioned FastAPI API, bounded job orchestration, hardware-aware benchmarking, deterministic optimization decisions and test-only end-to-end verification are in place. Real llama.cpp execution is optional and has not been exercised here; UI dashboards remain future work. See [Backend/README.md](Backend/README.md) and [docs/implementation-decisions.md](docs/implementation-decisions.md).
+It couples a high-performance **FastAPI + SQLAlchemy** backend engine with a rich, interactive **React 18 + Vite** frontend (deployable as both a web application and a native **Tauri 2** desktop app), featuring interactive 3D topology visualization, live telemetry, and Pareto-optimal solver analytics.
+
+---
+
+## Architecture & Workspaces
+
+Lattice is structured around 5 comprehensive interactive workspaces:
+
+1. **Overview Dashboard (`/overview`)**
+   - **Interactive 3D Lattice Canvas**: Real-time configuration topology visualization rendered with Three.js and React Three Fiber, showing candidate nodes, connecting bridges, and foundation planes.
+   - **Compact Metrics Strip**: Hardware-aware real-time telemetry (active device, memory ceiling, best throughput, and Pareto candidate count).
+   - **Configuration Space Legend & Filter**: Dynamic toggles for candidate categories (Pareto Frontier, Dominated, Infeasible, Evaluated).
+   - **Performance Trends Chart**: ECharts scatter and trend regression visualizing latency vs. throughput trade-offs.
+   - **Recent Experiments Table & Candidate Inspector**: Drilldown modal for inspection of quantization levels, context lengths, and VRAM footprints.
+
+2. **Model Lab (`/model-lab`)**
+   - **Procedural 3D Model Archetypes**: 3D geometric entities representing different model families (`Orbital`, `Fractal`, `Lattice`, `Pedestal`).
+   - **Catalog Browser**: Search, filter, and inspect local and catalog model families (Qwen, Llama, DeepSeek, Mistral, Gemma, Phi).
+   - **Quantization Variant Strip**: Interactive selection across quantization formats (`Q4_K_M`, `Q5_K_M`, `Q8_0`, `FP16`, `AWQ`, `GGUF`).
+   - **Hardware Compatibility Matrix**: Automatic VRAM and system memory sizing checks against detected hardware.
+   - **Configuration Comparison Dialog**: Side-by-side comparison of memory footprints, parameter sizes, and expected tokens/sec.
+
+3. **Optimization Lab (`/optimization-lab`)**
+   - **Multi-Objective Pareto Plot**: Interactive 2D trade-off scatter plot with interactive frontier curve overlay and candidate inspection.
+   - **Constraint Studio**: Live slider-based constraint tuning for Latency (TTFT), Peak Memory (VRAM), Throughput, and Minimum Quality Score.
+   - **Statistical Distributions**: Descriptive statistics (Mean, Median, P95, Standard Deviation) across feasible and infeasible configurations.
+   - **Optimization Results Inspector**: Solver recommendations, constraint satisfaction breakdown, and direct handoff to live experiment validation.
+
+4. **Experiments Suite (`/experiments`)**
+   - **Live Telemetry & Iteration Gauge**: Real-time progress ring, decoding tokens counter, current latency, and memory footprint.
+   - **Benchmark Configuration Form**: Workload types (General, Code, Chat, Summarization), prompt datasets, repetition counts, and decoding parameters (temperature, top_p, top_k).
+   - **Live Execution Logs**: Timestamped streaming event logs with filtering and export.
+   - **Results & Deep-Dive Comparison**: Statistical comparison tables (Mean ± Std Dev) comparing baseline fixed quantization against Lattice's adaptive dynamic selection.
+   - **Data Export**: One-click results export in CSV and JSON formats.
+
+5. **Settings & Preferences (`/settings`)**
+   - **Inference Runtime Adapter**: Configure runtime providers (`llama.cpp`, vLLM, Fake Test Adapter), context lengths, and CPU thread allocations.
+   - **API & Backend Connectivity**: Live endpoint status check, custom base URL configuration, and retry intervals.
+   - **Data Storage Paths**: Configurable directories for models (`/models`), experiment artifacts (`/experiments`), and SQLite database files.
+   - **Appearance & System Information**: Detected hardware profile (CPU, GPU, RAM, OS platform), theme selection, and factory reset modal.
+
+> **Resilient Demo Mode**: If the backend is not running, the frontend automatically activates **Demo Mode**, supplying high-fidelity benchmark fixtures and mock telemetry so the entire interface can be tested immediately with zero configuration. Once the backend is online, the app seamlessly connects to live endpoints.
 
 ---
 
 ## Technology Stack
 
-### Frontend & Desktop Shell
-- **Desktop Runtime**: [Tauri 2](https://v2.tauri.app/)
-- **UI Framework**: [React 18](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
-- **Build Tool**: [Vite 6](https://vitejs.dev/)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
-- **Design Primitives**: shadcn/ui prerequisites (`clsx`, `tailwind-merge`, `class-variance-authority`)
-- **Visualizations**: [Apache ECharts](https://echarts.apache.org/) & `echarts-for-react`
-- **Animations**: [Motion for React](https://motion.dev/)
-- **Icons**: [Lucide React](https://lucide.dev/)
-
-### Backend Service
-- **Runtime**: Python 3.11+ (Python 3.12 configured)
-- **API Framework**: [FastAPI](https://fastapi.tiangolo.com/)
-- **ASGI Server**: [Uvicorn](https://www.uvicorn.org/)
-- **Data Validation & Settings**: [Pydantic v2](https://docs.pydantic.dev/) & `pydantic-settings`
-- **Testing**: [Pytest](https://docs.pytest.org/) & [HTTPX](https://www.python-httpx.org/)
-- **Linter & Formatter**: [Ruff](https://docs.astral.sh/ruff/)
-
-### Desktop Build Environment
-- **Toolchain**: Rust (stable `x86_64-pc-windows-msvc`) & Cargo
-- **System Requirements**: Microsoft Visual Studio C++ Build Tools & Microsoft Edge WebView2
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend Framework** | [React 18](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) |
+| **Frontend Build Tool** | [Vite 6](https://vitejs.dev/) |
+| **3D Graphics & Canvas** | [Three.js](https://threejs.org/) + [@react-three/fiber](https://r3f.docs.pmnd.rs/) + [@react-three/drei](https://github.com/pmndrs/drei) |
+| **Data Visualizations** | [Apache ECharts](https://echarts.apache.org/) + `echarts-for-react` |
+| **Styling & UI Primitives** | [Tailwind CSS](https://tailwindcss.com/) + Custom Design Tokens + [Lucide React](https://lucide.dev/) |
+| **Desktop Shell** | [Tauri 2](https://v2.tauri.app/) (Rust-based lightweight desktop wrapper) |
+| **Backend Framework** | [FastAPI](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/) (ASGI server) |
+| **Persistence & ORM** | [SQLAlchemy 2.x](https://www.sqlalchemy.org/) + [SQLite](https://sqlite.org/) + [Alembic](https://alembic.sqlalchemy.org/) |
+| **Data Validation** | [Pydantic v2](https://docs.pydantic.dev/) + `pydantic-settings` |
+| **Testing & Quality** | [Pytest](https://docs.pytest.org/), [HTTPX](https://www.python-httpx.org/), [Ruff](https://docs.astral.sh/ruff/) |
 
 ---
 
-## Repository Structure
+## System Prerequisites
+
+Before getting started, ensure you have the following installed on your machine:
+
+1. **Node.js**: `v18.0.0` or higher (`v20+ LTS` or `v22` recommended). Includes `npm`.
+   - Check with: `node --version` and `npm --version`
+2. **Python**: `v3.11` or `v3.12` with `pip`.
+   - Check with: `python --version` (or `python3 --version`)
+3. **Git**: Required for cloning and submodule management.
+4. *(Optional — Only for Tauri Desktop build)*:
+   - **Rust Toolchain**: `rustup` with `stable-x86_64-pc-windows-msvc` (or macOS/Linux equivalent).
+   - **C++ Build Tools**: Microsoft C++ Build Tools (Windows) or `build-essential` (Linux).
+   - **WebView2**: Built into Windows 10/11.
+
+---
+
+## Step-by-Step Installation & Quickstart
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/ArjiJethin/Lattice-Framework.git
+cd Lattice-Framework
+```
+
+---
+
+### 2. Frontend Setup (Installing Vite & Dependencies)
+
+> **Where is Vite installed?**
+> Vite is configured locally as a developer dependency inside `frontend/package.json`. **You do NOT need to install Vite globally.** Running `npm install` inside the `frontend` folder automatically downloads and installs Vite and all required UI, 3D, and charting dependencies into `frontend/node_modules/`.
+
+```bash
+# 1. Navigate to the frontend directory
+cd frontend
+
+# 2. Install dependencies (installs Vite, React, Three.js, ECharts, Tailwind CSS)
+npm install
+
+# 3. Start the Vite development server
+npm run dev
+```
+
+The frontend will start instantly and output the local development URL:
+- **Local Application URL**: **`http://localhost:5173`**
+- Press `h` in the terminal for Vite shortcuts, or `q` to quit.
+
+#### Available Frontend Scripts:
+- `npm run dev`: Starts the local Vite development server with Hot Module Replacement (HMR).
+- `npm run build`: Runs TypeScript compiler (`tsc -b`) and bundles production assets with Vite into `frontend/dist/`.
+- `npm run preview`: Locally previews the production build.
+- `npm run lint`: Runs ESLint over all TypeScript and React files.
+
+---
+
+### 3. Backend Setup (FastAPI & Python Environment)
+
+The backend service handles hardware profiling, SQLite persistence, and runtime inference benchmarking.
+
+```bash
+# 1. Open a new terminal and navigate to the Backend directory
+cd Backend
+
+# 2. Create a Python virtual environment
+# Windows:
+python -m venv .venv
+# macOS/Linux:
+python3 -m venv .venv
+
+# 3. Activate the virtual environment
+# Windows (PowerShell):
+.\.venv\Scripts\Activate.ps1
+# Windows (Command Prompt):
+.\.venv\Scripts\activate.bat
+# macOS/Linux:
+source .venv/bin/activate
+
+# 4. Upgrade pip and install backend requirements
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# 5. Create your local environment configuration file
+# Windows (PowerShell):
+Copy-Item .env.example .env
+# macOS/Linux:
+cp .env.example .env
+
+# 6. (Optional) Run the automated test suite to verify installation
+pytest -q
+
+# 7. Start the FastAPI backend server
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Once started, the backend is accessible at:
+- **Interactive Swagger Documentation**: **`http://127.0.0.1:8000/docs`**
+- **ReDoc Documentation**: `http://127.0.0.1:8000/redoc`
+- **Health / Liveness Probe**: `http://127.0.0.1:8000/health`
+- **Readiness Probe**: `http://127.0.0.1:8000/ready`
+- **Hardware Capabilities Endpoint**: `http://127.0.0.1:8000/api/v1/capabilities`
+
+---
+
+### 4. Optional: Real GGUF Model Inference (`llama.cpp`)
+
+By default, the backend includes an offline mock/fake runtime allowing tests and development without downloading large weights. To execute real local LLM inference against GGUF models:
+
+1. **Install `llama-cpp-python`**:
+   ```bash
+   # CPU-only (standard):
+   pip install llama-cpp-python
+
+   # Or with NVIDIA CUDA acceleration (requires CUDA Toolkit):
+   # $env:CMAKE_ARGS="-DGGML_CUDA=on"
+   # pip install llama-cpp-python --force-reinstall --no-cache-dir
+   ```
+
+2. **Place GGUF Model Files**:
+   Download any compatible `.gguf` file (e.g., `Qwen2.5-0.5B-Instruct-Q4_K_M.gguf` or `Llama-3.2-1B-Instruct-Q4_K_M.gguf`) and place it inside the `models/` directory:
+   ```text
+   Lattice/
+   └── models/
+       └── Qwen2.5-0.5B-Instruct-Q4_K_M.gguf
+   ```
+
+3. Configure runtime path in `Backend/.env`:
+   ```dotenv
+   LATTICE_MODEL_ROOTS=["../models"]
+   LATTICE_DEFAULT_RUNTIME=llama_cpp
+   ```
+
+---
+
+### 5. Running the Complete Stack Concurrently
+
+You can run both the frontend and backend using the provided PowerShell helper script from the repository root:
+
+```powershell
+# Run both Frontend (port 5173) and Backend (port 8000) concurrently:
+.\scripts\dev.ps1 -Target all
+
+# Or run individual components:
+.\scripts\dev.ps1 -Target frontend
+.\scripts\dev.ps1 -Target backend
+
+# Or launch the native Tauri 2 desktop shell:
+.\scripts\dev.ps1 -Target tauri
+```
+
+---
+
+## Repository Directory Layout
 
 ```text
 Lattice/
-├── README.md                           # Project overview and quickstart
-├── .gitignore                          # Git ignore rules across languages
-├── .editorconfig                       # Coding style formatting rules
-├── docs/                               # Architecture and developer documentation
-│   ├── architecture.md                 # Backend layers, persistence and flows
-│   ├── api.md                          # Endpoint reference and curl examples
-│   ├── benchmarking.md                 # Protocol, metrics, statistics, provenance
-│   ├── hardware-detection.md           # Collectors, availability states, preflight
-│   ├── implementation-decisions.md     # Decisions, deviations, known limitations
-│   ├── handoff.md                      # Teammate ownership and contracts
-│   ├── setup-windows.md                # Windows prerequisite setup guide
-│   └── development-workflow.md         # Daily development workflows and commands
+├── README.md                           # Main documentation & quickstart guide
+├── .gitignore                          # Root Git ignore rules
+├── docs/                               # Architectural specifications & documentation
+│   ├── architecture.md                 # System layers, persistence, and data flow
+│   ├── api.md                          # Endpoint specifications and curl examples
+│   ├── benchmarking.md                 # Hardware measurement & statistical protocol
+│   ├── hardware-detection.md           # System hardware profiling collectors
+│   ├── implementation-decisions.md     # Architecture decisions and boundaries
+│   └── setup-windows.md                # Comprehensive Windows setup reference
 │
-├── Frontend/                           # React + Vite + Tauri frontend
-│   ├── package.json                    # Node dependencies and scripts
-│   ├── package-lock.json               # Deterministic lockfile
-│   ├── index.html                      # HTML entry point
-│   ├── vite.config.ts                  # Vite build and Tauri dev server config
-│   ├── tsconfig.json                   # TypeScript compiler options and aliases
-│   ├── tailwind.config.js              # Tailwind styling configuration
-│   ├── postcss.config.js               # PostCSS plugin pipeline
-│   ├── .env.example                    # Frontend environment template
-│   ├── public/                         # Static assets
-│   ├── src/                            # Application source
-│   │   ├── main.tsx                    # React DOM mount point
-│   │   ├── App.tsx                     # Root component (starter state)
-│   │   ├── components/                 # Reusable UI components (reserved)
-│   │   ├── pages/                      # Application route views (reserved)
-│   │   ├── hooks/                      # Custom React hooks (reserved)
-│   │   ├── lib/                        # Utility functions (includes shadcn cn helper)
-│   │   ├── types/                      # TypeScript definitions (reserved)
-│   │   └── styles/                     # Global styles and Tailwind layers
-│   │
-│   └── src-tauri/                      # Tauri 2 desktop shell
-│       ├── Cargo.toml                  # Rust dependencies manifest
-│       ├── build.rs                    # Tauri build hook
-│       ├── tauri.conf.json             # Tauri 2 configuration
-│       ├── capabilities/               # Security and window permissions
-│       └── src/
-│           └── main.rs                 # Native desktop application entry
+├── frontend/                           # React 18 + Vite 6 + Tailwind + Three.js application
+│   ├── package.json                    # Frontend dependencies & npm scripts (Vite, React, 3D)
+│   ├── vite.config.ts                  # Vite build configuration & local proxy settings
+│   ├── tsconfig.json                   # TypeScript configuration
+│   ├── tailwind.config.js              # Custom design system tokens & colors
+│   ├── index.html                      # HTML root template
+│   ├── src/
+│   │   ├── main.tsx                    # Application bootstrap & DOM mount
+│   │   ├── App.tsx                     # Main layout shell, routing & state container
+│   │   ├── components/
+│   │   │   ├── layout/                 # Shared Header, Sidebar, and Navigation
+│   │   │   ├── ui/                     # Primitives (Button, Select, Input, Badges, Tabs)
+│   │   │   ├── lattice3d/              # Three.js 3D Lattice Canvas & Node Visualization
+│   │   │   ├── model-entities/         # 3D Model Archetypes (Orbital, Fractal, Lattice)
+│   │   │   ├── overview/               # Overview page cards, charts, and tables
+│   │   │   ├── model-library/          # Model catalog, variant strip, compatibility
+│   │   │   ├── optimization-lab/       # Pareto chart, constraint studio, solver inspectors
+│   │   │   ├── experiments/            # Benchmark form, live progress ring, comparison table
+│   │   │   └── settings/               # Preferences cards, system info, reset modal
+│   │   ├── pages/                      # Page components (Overview, ModelLab, Optimization, Experiments, Settings)
+│   │   ├── lib/                        # API clients, demo datasets, utility helpers
+│   │   ├── hooks/                      # Custom React hooks (useModelLibrary)
+│   │   └── types/                      # TypeScript definitions across domains
+│   └── src-tauri/                      # Tauri 2 native desktop configuration & Rust backend
 │
-├── Backend/                            # Python FastAPI service
-│   ├── pyproject.toml                  # Project metadata, Ruff and Pytest configs
-│   ├── requirements.txt                # CPU-only dependency listing
-│   ├── .env.example                    # Environment template (all settings)
-│   ├── alembic/                        # Optional explicit migrations
-│   ├── scripts/smoke_fake_runtime.py   # Test-only end-to-end smoke test
-│   ├── app/                            # Backend source code
-│   │   ├── main.py                     # App factory, middleware, lifespan
-│   │   ├── api/                        # /api/v1 routes, deps, error handlers
-│   │   ├── core/                       # Settings, container, errors, validation
-│   │   ├── db/                         # SQLAlchemy models and session lifecycle
-│   │   ├── repositories/               # Persistence queries
-│   │   ├── services/                   # Orchestration and business rules
-│   │   ├── jobs/                       # Bounded in-process job manager
-│   │   ├── runtime/                    # Runtime contract, llama.cpp, test fake
-│   │   ├── hardware/                   # Collectors, telemetry, preflight
-│   │   ├── benchmarking/               # Protocol, metrics, statistics, quality
-│   │   ├── optimization/               # Pure optimizer contract + baseline
-│   │   └── schemas/                    # Pydantic API schemas
-│   └── tests/                          # Unit, DB, API and end-to-end tests
+├── Backend/                            # FastAPI + SQLAlchemy Python service
+│   ├── pyproject.toml                  # Python package configuration and tool metadata
+│   ├── requirements.txt                # Python dependencies (FastAPI, Uvicorn, SQLAlchemy)
+│   ├── .env.example                    # Backend environment variable template
+│   ├── app/
+│   │   ├── main.py                     # FastAPI application factory and lifecycle
+│   │   ├── api/                        # Versioned API routes (/api/v1/*)
+│   │   ├── core/                       # Configuration settings, dependency container
+│   │   ├── db/                         # SQLAlchemy database models & session management
+│   │   ├── hardware/                   # System and GPU telemetry collectors
+│   │   ├── runtime/                    # Inference runtime adapters (llama.cpp, fake test)
+│   │   ├── benchmarking/               # Benchmark job executor and metrics aggregators
+│   │   └── optimization/               # Multi-objective Pareto frontier solver
+│   └── tests/                          # Backend unit, integration, and API tests
 │
-├── experiments/                        # Experiment artifacts
-│   ├── workloads/                      # Benchmark input definitions
-│   ├── results/                        # Raw experiment results
-│   └── reports/                        # Analysis reports and summaries
+├── models/                             # Approved local model directory for GGUF weights
+│   ├── .gitkeep
+│   ├── frontend_source_code_part1.txt  # Clean frontend export (Part 1 of 2: 56 files)
+│   └── frontend_source_code_part2.txt  # Clean frontend export (Part 2 of 2: 33 files)
 │
-├── models/                             # Model weights directory (.gitkeep only)
 └── scripts/
     └── dev.ps1                         # PowerShell development environment launcher
 ```
 
 ---
 
-## Setup Prerequisites
+## Troubleshooting & FAQ
 
-1. **Node.js**: v18+ (LTS v20+ or v24 recommended) with `npm`
-2. **Python**: v3.11 or v3.12 with `pip`
-3. **Rust Toolchain**: `rustup` with `stable-x86_64-pc-windows-msvc`
-4. **C++ Build Tools**: Visual Studio Build Tools with C++ workload
-5. **WebView2**: Windows 10/11 default runtime
+### 1. PowerShell Script Execution Policy (`Activate.ps1` error)
+If running `.\.venv\Scripts\Activate.ps1` produces a script execution error on Windows:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+```
+Then run the activation command again.
 
-For detailed step-by-step installation on Windows, consult [docs/setup-windows.md](docs/setup-windows.md).
+### 2. Port Conflicts
+- **Frontend (Port 5173)**: If port 5173 is already in use, Vite will automatically select the next available port (e.g. `5174`), or you can specify a custom port:
+  ```bash
+  npm run dev -- --port 3000
+  ```
+- **Backend (Port 8000)**: To run the backend on a different port:
+  ```bash
+  uvicorn app.main:app --reload --host 127.0.0.1 --port 8080
+  ```
+  *(Remember to update the API Base URL in the Settings workspace if changing the backend port)*.
+
+### 3. WebGL / 3D Canvas Performance
+The 3D canvases use hardware-accelerated WebGL through Three.js. Ensure hardware acceleration is enabled in your browser settings (Chrome: `Settings -> System -> Use graphics acceleration when available`).
 
 ---
 
-## Quickstart
+## License
 
-### 1. Frontend Setup
-```powershell
-cd Frontend
-npm install
-npm run build
-```
-
-### 2. Backend Setup
-```powershell
-cd Backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-Copy-Item .env.example .env
-pytest -q
-```
-
-Full backend setup, migrations and the test-only smoke test are in
-[Backend/README.md](Backend/README.md).
-
-### 3. Running Development Servers
-Use the helper script from the repository root:
-```powershell
-# Run frontend only (http://localhost:5173)
-.\scripts\dev.ps1 -Target frontend
-
-# Run backend only (http://127.0.0.1:8000/docs)
-.\scripts\dev.ps1 -Target backend
-
-# Run both concurrently
-.\scripts\dev.ps1 -Target all
-
-# Run Tauri desktop app
-.\scripts\dev.ps1 -Target tauri
-```
-
----
-
-## Current Phase and Limitations
-
-- **Frontend**: Minimal buildable starter; API dashboards are not implemented yet.
-- **Backend**: Persistence, configurations/workloads, bounded jobs, benchmarking,
-  history/import/export, deterministic optimization and inference orchestration
-  are implemented and covered by tests.
-- **Models & Inference**: No model weights are packaged or downloaded. The real
-  llama.cpp adapter is optional (`llama-cpp-python`) and has been exercised on a
-  local CPU-only Qwen2.5-0.5B-Instruct Q4_K_M GGUF through the HTTP API; measured
-  results and provenance are in `docs/backend-run.txt` section 11f. Fake-runtime
-  runs are test-only and are never real model performance.
-- **Not implemented**: distributed queueing, auth/TLS, GPU telemetry beyond
-  NVIDIA best-effort, rich quality evaluators, adaptive research optimizers, and
-  model quantization/compression. Lattice selects a configuration from measured
-  evidence; it never quantizes or compresses a model, and the bundled Qwen GGUF
-  is already `Q4_K_M` from upstream.
-
-See [docs/implementation-decisions.md](docs/implementation-decisions.md) for the
-full limitations list.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

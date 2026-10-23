@@ -1,11 +1,5 @@
 import React from 'react';
-import {
-  Play,
-  RotateCcw,
-  ChevronDown,
-  Info,
-  Loader2,
-} from 'lucide-react';
+import { Play, RotateCcw } from 'lucide-react';
 import {
   ExperimentConfiguration,
   WorkloadType,
@@ -15,6 +9,13 @@ import {
   DATASET_OPTIONS,
   WORKLOAD_OPTIONS,
 } from '../../lib/experiments/experimentsService';
+import {
+  Button,
+  Select,
+  Input,
+  Checkbox,
+  StatusBadge,
+} from '../ui/primitives';
 
 interface ExperimentConfigurationFormProps {
   config: ExperimentConfiguration;
@@ -46,22 +47,32 @@ export const ExperimentConfigurationForm: React.FC<ExperimentConfigurationFormPr
   };
 
   const handleRunsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseInt(e.target.value, 10);
-    if (!isNaN(val) && val >= 1 && val <= 100) {
-      onChangeConfig({ numberOfRuns: val });
+    const raw = e.target.value;
+    if (raw === '') return;
+    const val = parseInt(raw, 10);
+    if (!isNaN(val)) {
+      onChangeConfig({ numberOfRuns: Math.max(1, Math.min(100, val)) });
     }
   };
 
   const handleGenParamChange = (
     field: keyof ExperimentConfiguration['generationParams'],
-    val: number
+    rawValue: string
   ) => {
-    onChangeConfig({
-      generationParams: {
-        ...config.generationParams,
-        [field]: val,
-      },
-    });
+    if (rawValue === '') return;
+    const parsed =
+      field === 'temperature' || field === 'topP'
+        ? parseFloat(rawValue)
+        : parseInt(rawValue, 10);
+
+    if (!isNaN(parsed)) {
+      onChangeConfig({
+        generationParams: {
+          ...config.generationParams,
+          [field]: parsed,
+        },
+      });
+    }
   };
 
   const handleMetricToggle = (field: keyof ExperimentConfiguration['metrics']) => {
@@ -79,362 +90,318 @@ export const ExperimentConfigurationForm: React.FC<ExperimentConfigurationFormPr
     DATASET_OPTIONS.find((d) => d.id === config.dataset) || DATASET_OPTIONS[0];
 
   return (
-    <div className="w-full bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-xs p-5 transition-all flex flex-col gap-5">
-      {/* 1. Header with section number */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
-        <div className="flex items-baseline gap-2.5">
-          <h2 className="text-base font-extrabold text-[#18213B] tracking-tight">
+    <div className="w-full bg-white rounded-lg border border-[#D9DEE7] shadow-2xs p-4 flex flex-col gap-4">
+      {/* 1. Header */}
+      <div className="flex items-center justify-between pb-2.5 border-b border-[#E6EAF0] flex-wrap gap-2">
+        <div>
+          <h2 className="text-[15px] font-semibold text-[#222938] tracking-tight">
             1. Experiment Configuration
           </h2>
-          <span className="text-xs text-slate-500 font-medium">
-            Define the experiment settings and select what to compare.
-          </span>
+          <p className="text-[12px] text-[#647187] mt-0.5">
+            Define workload parameters, prompt datasets, and metrics to evaluate.
+          </p>
         </div>
 
-        {!isBackendConnected && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <Info className="w-3.5 h-3.5 text-amber-500" />
-            <span>Demo Mode — Reviewing Recorded Benchmarks</span>
-          </div>
+        {isBackendConnected ? (
+          <StatusBadge tone="success">Live Runtime Ready</StatusBadge>
+        ) : (
+          <StatusBadge tone="warning">
+            Demo Mode — Reviewing Recorded Benchmarks
+          </StatusBadge>
         )}
       </div>
 
-      {/* 2. Top Controls Row */}
+      {/* 2. Top Controls Row (12-Col Grid) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-        {/* Comparison Mode (Col 4) */}
-        <div className="lg:col-span-4 flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-[#18213B]">Comparison Mode</label>
-          <div className="grid grid-cols-2 gap-2 h-full">
-            {/* Fixed Configuration Button */}
+        {/* Comparison Mode (Col 5) */}
+        <div className="lg:col-span-5 flex flex-col justify-between gap-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-[12px] font-medium text-[#222938]">
+              Comparison Strategy
+            </label>
+            <span className="text-[10.5px] font-mono text-[#647187] uppercase">
+              {config.strategy}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => handleStrategyChange('fixed')}
-              className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
-                config.strategy === 'fixed'
-                  ? 'border-[#7C6AF2] bg-purple-50/50 shadow-2xs'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
-              }`}
+              className={`p-2.5 rounded-md border text-left transition-colors cursor-pointer ${config.strategy === 'fixed'
+                  ? 'border-[#7562E8] bg-[#F2F0FD]'
+                  : 'border-[#D9DEE7] bg-white hover:bg-[#F8F9FB]'
+                }`}
             >
               <div className="flex items-center gap-2">
-                <div
-                  className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                    config.strategy === 'fixed'
-                      ? 'border-[#7C6AF2]'
-                      : 'border-slate-300'
-                  }`}
+                <span
+                  className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${config.strategy === 'fixed'
+                      ? 'border-[#7562E8] bg-white'
+                      : 'border-[#8A94A6]'
+                    }`}
                 >
                   {config.strategy === 'fixed' && (
-                    <div className="w-2 h-2 rounded-full bg-[#7C6AF2]" />
+                    <span className="w-2 h-2 rounded-full bg-[#7562E8]" />
                   )}
-                </div>
-                <span className="text-xs font-bold text-[#18213B]">
+                </span>
+                <span className="text-[12.5px] font-semibold text-[#222938] truncate">
                   Fixed Configuration
                 </span>
               </div>
-              <span className="text-[10.5px] text-slate-500 font-medium ml-6 mt-1">
-                Use a specific model configuration
+              <span className="text-[11px] text-[#647187] block pl-5.5 mt-0.5 truncate">
+                Single static quantization
               </span>
             </button>
 
-            {/* Adaptive Lattice Button */}
             <button
               type="button"
               onClick={() => handleStrategyChange('adaptive')}
-              className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
-                config.strategy === 'adaptive'
-                  ? 'border-[#7C6AF2] bg-purple-50/50 shadow-2xs'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
-              }`}
+              className={`p-2.5 rounded-md border text-left transition-colors cursor-pointer ${config.strategy === 'adaptive'
+                  ? 'border-[#7562E8] bg-[#F2F0FD]'
+                  : 'border-[#D9DEE7] bg-white hover:bg-[#F8F9FB]'
+                }`}
             >
               <div className="flex items-center gap-2">
-                <div
-                  className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                    config.strategy === 'adaptive'
-                      ? 'border-[#7C6AF2]'
-                      : 'border-slate-300'
-                  }`}
+                <span
+                  className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${config.strategy === 'adaptive'
+                      ? 'border-[#7562E8] bg-white'
+                      : 'border-[#8A94A6]'
+                    }`}
                 >
                   {config.strategy === 'adaptive' && (
-                    <div className="w-2 h-2 rounded-full bg-[#7C6AF2]" />
+                    <span className="w-2 h-2 rounded-full bg-[#7562E8]" />
                   )}
-                </div>
-                <span className="text-xs font-bold text-[#18213B]">
+                </span>
+                <span className="text-[12.5px] font-semibold text-[#222938] truncate">
                   Adaptive (Lattice)
                 </span>
               </div>
-              <span className="text-[10.5px] text-slate-500 font-medium ml-6 mt-1">
-                Let Lattice select configuration
+              <span className="text-[11px] text-[#647187] block pl-5.5 mt-0.5 truncate">
+                Dynamic Pareto selection
               </span>
             </button>
           </div>
         </div>
 
         {/* Workload Type (Col 3) */}
-        <div className="lg:col-span-3 flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-[#18213B]">Workload Type</label>
-          <div className="relative">
-            <select
-              value={config.workloadType}
-              onChange={handleWorkloadChange}
-              className="w-full appearance-none bg-white border border-slate-200 rounded-xl px-3 py-2.5 pr-8 text-xs font-bold text-[#18213B] shadow-2xs hover:border-slate-300 focus:outline-none focus:border-[#7C6AF2] transition-colors cursor-pointer"
-            >
-              {WORKLOAD_OPTIONS.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-3 pointer-events-none" />
+        <div className="lg:col-span-3 flex flex-col justify-between gap-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-[12px] font-medium text-[#222938]">
+              Workload Type
+            </label>
+            <span className="text-[10.5px] font-mono text-[#647187]">Profile</span>
           </div>
-          <span className="text-[11px] text-slate-500 font-medium">
+          <Select value={config.workloadType} onChange={handleWorkloadChange}>
+            {WORKLOAD_OPTIONS.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.label}
+              </option>
+            ))}
+          </Select>
+          <span
+            className="text-[11px] text-[#647187] truncate"
+            title={activeWorkload.description}
+          >
             {activeWorkload.description}
           </span>
         </div>
 
-        {/* Dataset / Prompt Set (Col 3) */}
-        <div className="lg:col-span-3 flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-[#18213B]">Dataset / Prompt Set</label>
-          <div className="relative">
-            <select
-              value={config.dataset}
-              onChange={handleDatasetChange}
-              className="w-full appearance-none bg-white border border-slate-200 rounded-xl px-3 py-2.5 pr-8 text-xs font-bold text-[#18213B] shadow-2xs hover:border-slate-300 focus:outline-none focus:border-[#7C6AF2] transition-colors cursor-pointer"
-            >
-              {DATASET_OPTIONS.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-3 pointer-events-none" />
+        {/* Dataset / Prompt Set (Col 2) */}
+        <div className="lg:col-span-2 flex flex-col justify-between gap-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-[12px] font-medium text-[#222938]">
+              Dataset / Prompts
+            </label>
           </div>
-          <span className="text-[11px] text-slate-500 font-medium">
+          <Select value={config.dataset} onChange={handleDatasetChange}>
+            {DATASET_OPTIONS.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.label}
+              </option>
+            ))}
+          </Select>
+          <span
+            className="text-[11px] text-[#647187] truncate"
+            title={activeDataset.description}
+          >
             {activeDataset.description}
           </span>
         </div>
 
         {/* Number of Runs (Col 2) */}
-        <div className="lg:col-span-2 flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-[#18213B]">Number of Runs</label>
-          <input
+        <div className="lg:col-span-2 flex flex-col justify-between gap-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-[12px] font-medium text-[#222938]">
+              Number of Runs
+            </label>
+            <span className="text-[10.5px] font-mono text-[#647187]">5–30</span>
+          </div>
+          <Input
             type="number"
+            mono
             min={1}
             max={100}
             value={config.numberOfRuns}
             onChange={handleRunsChange}
-            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-extrabold text-[#18213B] shadow-2xs hover:border-slate-300 focus:outline-none focus:border-[#7C6AF2] transition-colors"
           />
-          <span className="text-[11px] text-slate-500 font-medium">
-            Runs per configuration
+          <span className="text-[11px] text-[#647187] truncate">
+            Repetitions per strategy
           </span>
         </div>
       </div>
 
-      {/* 3. Bottom Row: Generation Parameters, Metrics to Evaluate, and Run Action */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch pt-1">
+      {/* 3. Bottom Row: Generation Parameters, Metrics to Evaluate, and Actions */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch pt-3 border-t border-[#E6EAF0]">
         {/* Generation Parameters (Col 5) */}
-        <div className="lg:col-span-5 flex flex-col gap-2">
-          <label className="text-xs font-bold text-[#18213B]">
-            Generation Parameters
-          </label>
-          <div className="grid grid-cols-4 gap-2">
-            {/* Max New Tokens */}
-            <div className="p-2.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex flex-col justify-between">
-              <span className="text-[10px] font-semibold text-slate-400 block truncate">
-                Max New Tokens
+        <div className="lg:col-span-5 flex flex-col justify-between gap-2">
+          <div className="flex items-center justify-between">
+            <label className="text-[12px] font-medium text-[#222938]">
+              Generation Parameters
+            </label>
+            <span className="text-[10.5px] font-mono text-[#647187]">
+              Decode sampling controls
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7] flex flex-col justify-between gap-1">
+              <span className="text-[10.5px] font-medium text-[#647187] truncate">
+                Max Tokens
               </span>
-              <input
+              <Input
                 type="number"
+                mono
                 min={16}
                 max={4096}
                 step={32}
                 value={config.generationParams.maxNewTokens}
-                onChange={(e) =>
-                  handleGenParamChange('maxNewTokens', parseInt(e.target.value, 10) || 512)
-                }
-                className="text-xs font-extrabold text-[#18213B] w-full bg-transparent mt-1 border-b border-transparent focus:border-[#7C6AF2] focus:outline-none"
+                onChange={(e) => handleGenParamChange('maxNewTokens', e.target.value)}
+                className="h-7 px-2 text-[12px]"
               />
-              <span className="text-[9px] text-slate-400 mt-1 block truncate">
-                Length of generated output
-              </span>
+              <span className="text-[10px] text-[#8A94A6] truncate">Output budget</span>
             </div>
 
-            {/* Temperature */}
-            <div className="p-2.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex flex-col justify-between">
-              <span className="text-[10px] font-semibold text-slate-400 block truncate">
+            <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7] flex flex-col justify-between gap-1">
+              <span className="text-[10.5px] font-medium text-[#647187] truncate">
                 Temperature
               </span>
-              <input
+              <Input
                 type="number"
+                mono
                 min={0}
                 max={2}
                 step={0.1}
                 value={config.generationParams.temperature}
-                onChange={(e) =>
-                  handleGenParamChange('temperature', parseFloat(e.target.value) || 0.7)
-                }
-                className="text-xs font-extrabold text-[#18213B] w-full bg-transparent mt-1 border-b border-transparent focus:border-[#7C6AF2] focus:outline-none"
+                onChange={(e) => handleGenParamChange('temperature', e.target.value)}
+                className="h-7 px-2 text-[12px]"
               />
-              <span className="text-[9px] text-slate-400 mt-1 block truncate">
-                Controls randomness
-              </span>
+              <span className="text-[10px] text-[#8A94A6] truncate">Randomness</span>
             </div>
 
-            {/* Top P */}
-            <div className="p-2.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex flex-col justify-between">
-              <span className="text-[10px] font-semibold text-slate-400 block truncate">
+            <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7] flex flex-col justify-between gap-1">
+              <span className="text-[10.5px] font-medium text-[#647187] truncate">
                 Top P
               </span>
-              <input
+              <Input
                 type="number"
-                min={0}
+                mono
+                min={0.05}
                 max={1}
                 step={0.05}
                 value={config.generationParams.topP}
-                onChange={(e) =>
-                  handleGenParamChange('topP', parseFloat(e.target.value) || 0.9)
-                }
-                className="text-xs font-extrabold text-[#18213B] w-full bg-transparent mt-1 border-b border-transparent focus:border-[#7C6AF2] focus:outline-none"
+                onChange={(e) => handleGenParamChange('topP', e.target.value)}
+                className="h-7 px-2 text-[12px]"
               />
-              <span className="text-[9px] text-slate-400 mt-1 block truncate">
-                Nucleus sampling
-              </span>
+              <span className="text-[10px] text-[#8A94A6] truncate">Nucleus</span>
             </div>
 
-            {/* Top K */}
-            <div className="p-2.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex flex-col justify-between">
-              <span className="text-[10px] font-semibold text-slate-400 block truncate">
+            <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7] flex flex-col justify-between gap-1">
+              <span className="text-[10.5px] font-medium text-[#647187] truncate">
                 Top K
               </span>
-              <input
+              <Input
                 type="number"
+                mono
                 min={1}
-                max={100}
+                max={200}
                 step={5}
                 value={config.generationParams.topK}
-                onChange={(e) =>
-                  handleGenParamChange('topK', parseInt(e.target.value, 10) || 50)
-                }
-                className="text-xs font-extrabold text-[#18213B] w-full bg-transparent mt-1 border-b border-transparent focus:border-[#7C6AF2] focus:outline-none"
+                onChange={(e) => handleGenParamChange('topK', e.target.value)}
+                className="h-7 px-2 text-[12px]"
               />
-              <span className="text-[9px] text-slate-400 mt-1 block truncate">
-                Token selection limit
-              </span>
+              <span className="text-[10px] text-[#8A94A6] truncate"> Candidates</span>
             </div>
           </div>
         </div>
 
         {/* Metrics to Evaluate (Col 4) */}
-        <div className="lg:col-span-4 flex flex-col gap-2">
-          <label className="text-xs font-bold text-[#18213B]">
+        <div className="lg:col-span-4 flex flex-col justify-between gap-2">
+          <label className="text-[12px] font-medium text-[#222938]">
             Metrics to Evaluate
           </label>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] font-medium text-slate-600">
-            {/* Col 1 */}
-            <div className="flex flex-col gap-2">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={config.metrics.latencyTtft}
-                  onChange={() => handleMetricToggle('latencyTtft')}
-                  className="rounded text-[#7C6AF2] focus:ring-[#7C6AF2] border-slate-300 w-3.5 h-3.5"
-                />
-                <span className="truncate">Latency (time to first token)</span>
-              </label>
-
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={config.metrics.totalGenerationTime}
-                  onChange={() => handleMetricToggle('totalGenerationTime')}
-                  className="rounded text-[#7C6AF2] focus:ring-[#7C6AF2] border-slate-300 w-3.5 h-3.5"
-                />
-                <span className="truncate">Total generation time</span>
-              </label>
-
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={config.metrics.memoryUsagePeak}
-                  onChange={() => handleMetricToggle('memoryUsagePeak')}
-                  className="rounded text-[#7C6AF2] focus:ring-[#7C6AF2] border-slate-300 w-3.5 h-3.5"
-                />
-                <span className="truncate">Memory usage (peak)</span>
-              </label>
-
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={config.metrics.throughput}
-                  onChange={() => handleMetricToggle('throughput')}
-                  className="rounded text-[#7C6AF2] focus:ring-[#7C6AF2] border-slate-300 w-3.5 h-3.5"
-                />
-                <span className="truncate">Throughput (tokens/s)</span>
-              </label>
-            </div>
-
-            {/* Col 2 */}
-            <div className="flex flex-col gap-2">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={config.metrics.outputQuality}
-                  onChange={() => handleMetricToggle('outputQuality')}
-                  className="rounded text-[#7C6AF2] focus:ring-[#7C6AF2] border-slate-300 w-3.5 h-3.5"
-                />
-                <span className="truncate">Output quality (if available)</span>
-              </label>
-
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={config.metrics.compareAdaptive}
-                  onChange={() => handleMetricToggle('compareAdaptive')}
-                  className="rounded text-[#7C6AF2] focus:ring-[#7C6AF2] border-slate-300 w-3.5 h-3.5"
-                />
-                <span className="truncate">Compare with adaptive selection</span>
-              </label>
-            </div>
+          <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7] grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+            <Checkbox
+              id="metric-ttft"
+              checked={config.metrics.latencyTtft}
+              onCheckedChange={() => handleMetricToggle('latencyTtft')}
+              label="Latency (TTFT)"
+            />
+            <Checkbox
+              id="metric-gen-time"
+              checked={config.metrics.totalGenerationTime}
+              onCheckedChange={() => handleMetricToggle('totalGenerationTime')}
+              label="Total generation time"
+            />
+            <Checkbox
+              id="metric-memory"
+              checked={config.metrics.memoryUsagePeak}
+              onCheckedChange={() => handleMetricToggle('memoryUsagePeak')}
+              label="Peak memory usage"
+            />
+            <Checkbox
+              id="metric-throughput"
+              checked={config.metrics.throughput}
+              onCheckedChange={() => handleMetricToggle('throughput')}
+              label="Throughput (tok/s)"
+            />
+            <Checkbox
+              id="metric-quality"
+              checked={config.metrics.outputQuality}
+              onCheckedChange={() => handleMetricToggle('outputQuality')}
+              label="Output quality score"
+            />
+            <Checkbox
+              id="metric-adaptive"
+              checked={config.metrics.compareAdaptive}
+              onCheckedChange={() => handleMetricToggle('compareAdaptive')}
+              label="Compare adaptive"
+            />
           </div>
         </div>
 
-        {/* Action Buttons (Col 3) */}
+        {/* Action Buttons Hierarchy (Col 3): Primary Run Experiment + Secondary Reset */}
         <div className="lg:col-span-3 flex flex-col justify-end gap-2">
-          {/* Run Experiment Button matching screenshot */}
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="lg"
             onClick={onRunExperiment}
-            disabled={isRunning}
-            className={`w-full py-3.5 px-4 rounded-2xl flex items-center justify-center gap-3 shadow-md transition-all cursor-pointer ${
-              isRunning
-                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-[#7C6AF2] via-[#6B57EC] to-[#5F46E8] hover:from-[#6B57EC] hover:to-[#5037DE] text-white shadow-[#7C6AF2]/25 hover:shadow-lg active:scale-[0.99]'
-            }`}
+            isLoading={isRunning}
+            leftIcon={<Play className="w-4 h-4 fill-current" />}
+            className="w-full"
           >
-            {isRunning ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Play className="w-5 h-5 fill-current" />
-            )}
-            <div className="text-left leading-tight">
-              <div className="text-sm font-black">
-                {isRunning ? 'Running Experiment...' : 'Run Experiment'}
-              </div>
-              <div className="text-[10.5px] opacity-90 font-medium">
-                {isRunning ? 'Measuring iterations' : 'Start Evaluation'}
-              </div>
-            </div>
-          </button>
+            {isRunning ? 'Running Experiment...' : 'Run Experiment'}
+          </Button>
 
-          {/* Reset Settings Button */}
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onResetConfig}
-            className="w-full py-1.5 px-3 rounded-xl border border-slate-200 text-slate-500 hover:text-[#18213B] hover:bg-slate-50 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            disabled={isRunning}
+            leftIcon={<RotateCcw className="w-3.5 h-3.5 text-[#647187]" />}
+            className="w-full"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Settings</span>
-          </button>
+            Reset Settings
+          </Button>
         </div>
       </div>
     </div>

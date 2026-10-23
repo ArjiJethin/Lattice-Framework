@@ -10,6 +10,11 @@ import { getColorPaletteById } from '../model-entities/SharedModelMaterials';
 import { ModelAnnotations } from './ModelAnnotations';
 import { RotateCcw, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 
+// Equivalent to clicking Zoom Out (multiplyScalar(1.15)) twice from [0, 0.95, 7.35]:
+// [0 * 1.15^2, 0.95 * 1.15^2, 7.35 * 1.15^2] = [0, 1.256375, 9.720375]
+const INITIAL_MODEL_CAMERA_POSITION: [number, number, number] = [0, 1.256375, 9.720375];
+const INITIAL_MODEL_CAMERA_TARGET: [number, number, number] = [0, -0.05, 0];
+
 interface ModelEntitySceneProps {
   model: ModelFamily;
   selectedVariant: QuantizationVariant;
@@ -33,8 +38,8 @@ export const ModelEntityScene: React.FC<ModelEntitySceneProps> = ({
   const resetCamera = () => {
     if (controlsRef.current) {
       controlsRef.current.reset();
-      controlsRef.current.object.position.set(0, 0.95, 7.35);
-      controlsRef.current.target.set(0, -0.05, 0);
+      controlsRef.current.object.position.set(...INITIAL_MODEL_CAMERA_POSITION);
+      controlsRef.current.target.set(...INITIAL_MODEL_CAMERA_TARGET);
       controlsRef.current.update();
     }
   };
@@ -86,7 +91,7 @@ export const ModelEntityScene: React.FC<ModelEntitySceneProps> = ({
         shadows
         dpr={[1, 1.5]}
         camera={{
-          position: [0, 0.95, 7.35],
+          position: INITIAL_MODEL_CAMERA_POSITION,
           fov: 32,
           near: 0.5,
           far: 60,
@@ -103,13 +108,13 @@ export const ModelEntityScene: React.FC<ModelEntitySceneProps> = ({
       >
         <OrbitControls
           ref={controlsRef}
-          target={[0, -0.05, 0]}
+          target={INITIAL_MODEL_CAMERA_TARGET}
           enableDamping
           dampingFactor={0.08}
           enableZoom={true}
           zoomSpeed={0.8}
           minDistance={4.2}
-          maxDistance={15}
+          maxDistance={18}
           minPolarAngle={Math.PI / 6}
           maxPolarAngle={Math.PI / 1.92}
           rotateSpeed={0.65}

@@ -39,21 +39,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onToggleDemoMode,
   onNavigate,
 }) => {
-  // 1. Persistent Settings State
   const [settings, setSettings] = useState<LatticeSettings>(() => loadLatticeSettings());
 
-  // 2. System Hardware Detection
   const [systemInfo, setSystemInfo] = useState<SystemInfoData>(() =>
     detectSystemHardware(backendState.connected)
   );
   const [isRefreshingHardware, setIsRefreshingHardware] = useState(false);
 
-  // 3. Modals and Feedback
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
 
-  // Refresh hardware detection when backendState changes
   useEffect(() => {
     setSystemInfo(detectSystemHardware(backendState.connected));
   }, [backendState.connected]);
@@ -63,11 +59,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     setTimeout(() => {
       setSystemInfo(detectSystemHardware(backendState.connected));
       setIsRefreshingHardware(false);
-      setNotification('System hardware configuration refreshed.');
-    }, 600);
+      setNotification('System hardware and client environment telemetry refreshed.');
+    }, 350);
   }, [backendState.connected]);
 
-  // Update specific settings section and persist
   const handleUpdateApiSettings = useCallback(
     (updated: Partial<LatticeSettings['api']>) => {
       setSettings((prev) => {
@@ -138,15 +133,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     []
   );
 
-  // Reset all settings to factory defaults
   const handleConfirmReset = useCallback(() => {
     const defaulted = resetLatticeSettings();
     setSettings(defaulted);
-    setNotification('All settings have been successfully restored to factory defaults.');
+    setNotification('All preferences have been restored to factory defaults.');
   }, []);
 
   return (
-    <div className="min-h-full flex flex-col p-4 md:p-6 gap-5 max-w-[1720px] mx-auto w-full select-none">
+    <div className="flex-1 w-full p-4 lg:p-6 flex flex-col gap-4 max-w-[1600px] mx-auto select-none pb-16">
       {/* 1. Header */}
       <SettingsHeader
         stats={summaryStats}
@@ -155,27 +149,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         onBackToOverview={() => onNavigate('overview')}
       />
 
-      {/* Notification Toast Banner */}
+      {/* Notification Banner */}
       {notification && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between gap-3 shadow-2xs animate-in fade-in duration-200">
+        <div className="p-3 rounded-lg bg-[#ECFDF5] border border-[#A7F3D0] text-[#0D8A58] text-[12px] font-medium flex items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-[#0D8A58] shrink-0" />
             <span>{notification}</span>
           </div>
           <button
+            type="button"
+            aria-label="Dismiss Notification"
             onClick={() => setNotification(null)}
-            className="text-emerald-700 hover:text-emerald-900 p-0.5 rounded cursor-pointer"
+            className="text-[#0D8A58] hover:text-[#065F46] p-0.5 rounded-sm cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* 2. Main 2-Column Responsive Layout matching reference screenshot */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      {/* 2. Main 2-Column Responsive Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* Left Column: API, Runtime, Experiment Defaults, Appearance (Col 8) */}
-        <div className="lg:col-span-8 flex flex-col gap-5">
-          {/* Section 1: API & Backend */}
+        <div className="lg:col-span-8 flex flex-col gap-4">
           <ApiBackendCard
             settings={settings.api}
             onChangeSettings={handleUpdateApiSettings}
@@ -184,19 +179,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             onToggleDemoMode={onToggleDemoMode}
           />
 
-          {/* Section 2: Inference & Runtime */}
           <InferenceRuntimeCard
             settings={settings.runtime}
             onChangeSettings={handleUpdateRuntimeSettings}
           />
 
-          {/* Section 3: Experiment Settings */}
           <ExperimentDefaultsCard
             settings={settings.experiments}
             onChangeSettings={handleUpdateExperimentSettings}
           />
 
-          {/* Section 4: Appearance & Preferences */}
           <AppearancePreferencesCard
             settings={settings.appearance}
             onChangeSettings={handleUpdateAppearanceSettings}
@@ -204,21 +196,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         </div>
 
         {/* Right Column: System Information, Data & Storage, About (Col 4) */}
-        <div className="lg:col-span-4 flex flex-col gap-5">
-          {/* Section 5: System Information */}
+        <div className="lg:col-span-4 flex flex-col gap-4">
           <SystemInformationCard
             systemInfo={systemInfo}
             onRefresh={handleRefreshHardware}
             isRefreshing={isRefreshingHardware}
           />
 
-          {/* Section 6: Data & Storage */}
           <DataStorageCard
             settings={settings.storage}
             onChangeSettings={handleUpdateStorageSettings}
           />
 
-          {/* Section 7: About & Reset */}
           <AboutCard
             onOpenCredits={() => setIsCreditsModalOpen(true)}
             onOpenResetModal={() => setIsResetModalOpen(true)}

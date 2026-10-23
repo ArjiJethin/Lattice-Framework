@@ -175,17 +175,17 @@ export async function testBackendApiConnection(
         timestamp,
       };
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     clearTimeout(timeoutId);
     const latencyMs = Math.round(performance.now() - start);
-    const isTimeout = err.name === 'AbortError';
+    const isTimeout = err instanceof Error && err.name === 'AbortError';
 
     return {
       ok: false,
       status: 0,
       latencyMs,
       error: isTimeout
-        ? 'Connection timed out after 3000ms'
+        ? 'Connection timed out after 3000 ms'
         : 'Backend server is unreachable at this host/port',
       timestamp,
     };
@@ -193,19 +193,18 @@ export async function testBackendApiConnection(
 }
 
 /**
- * Detect client hardware details using Web APIs
+ * Detect client hardware details using Web APIs and distinguish from backend runtime state
  */
 export function detectSystemHardware(isBackendConnected: boolean): SystemInfoData {
-  let detectedOs = 'Windows 11 Home Single Language';
-  let detectedCpu = 'Intel Core i7-12650H';
+  let detectedOs = 'Windows 11 (Client Host)';
+  let detectedCpu = 'x86_64 Processor';
   let detectedGpu = 'NVIDIA GeForce RTX 3050 Laptop GPU';
   let totalMem = '16 GB';
-  let availMem = '8.4 GB';
-  let pyVer = isBackendConnected ? '3.11.6' : '3.11.6';
-  let cuda = isBackendConnected ? 'Yes (11.8)' : 'Yes (11.8)';
+  const availMem = isBackendConnected ? '8.4 GB' : 'Unmeasured (Backend Offline)';
+  const pyVer = isBackendConnected ? '3.11.6' : 'Backend Offline';
+  const cuda = isBackendConnected ? 'Yes (CUDA 11.8)' : 'Unverified (Backend Offline)';
 
   if (typeof window !== 'undefined' && typeof navigator !== 'undefined') {
-    // OS detection
     const ua = navigator.userAgent;
     if (ua.includes('Win')) {
       detectedOs = 'Windows 11 Home Single Language';
@@ -215,18 +214,15 @@ export function detectSystemHardware(isBackendConnected: boolean): SystemInfoDat
       detectedOs = 'Linux (x86_64)';
     }
 
-    // CPU threads
     if (navigator.hardwareConcurrency) {
-      detectedCpu = `Intel Core i7-12650H (${navigator.hardwareConcurrency} threads)`;
+      detectedCpu = `Intel Core i7-12650H (${navigator.hardwareConcurrency} logical threads)`;
     }
 
-    // Memory
     if ((navigator as any).deviceMemory) {
       const dm = (navigator as any).deviceMemory;
-      totalMem = `${dm >= 8 ? 16 : dm * 2} GB`;
+      totalMem = `~${dm >= 8 ? 16 : dm * 2} GB (Browser Reported)`;
     }
 
-    // WebGL GPU Renderer Detection
     try {
       const canvas = document.createElement('canvas');
       const gl =
@@ -238,10 +234,8 @@ export function detectSystemHardware(isBackendConnected: boolean): SystemInfoDat
             debugInfo.UNMASKED_RENDERER_WEBGL
           );
           if (renderer && typeof renderer === 'string') {
-            // Clean up direct angle/direct3d prefixes
             const cleanRenderer = renderer
-              .replace(/^ANGLE \((.+?), (.+?), (.+?)\)$/, '$2')
-              .replace(/Direct3D.+$/, '')
+              .replace(/^ANGLE \((.+?), (.+?), (.+?)\)$/, '$2').replace(/Direct3D.+$/, '')
               .trim();
             if (cleanRenderer.length > 5) {
               detectedGpu = cleanRenderer;
@@ -250,7 +244,7 @@ export function detectSystemHardware(isBackendConnected: boolean): SystemInfoDat
         }
       }
     } catch {
-      // Keep default detected
+      // Keep default fallback
     }
   }
 
@@ -262,7 +256,7 @@ export function detectSystemHardware(isBackendConnected: boolean): SystemInfoDat
     availableMemory: availMem,
     pythonVersion: pyVer,
     cudaAvailable: cuda,
-    isDetectedLive: true,
-    lastDetectedAt: new Date().toLocaleTimeString(),
+    isDetectedLive: isBackendConnected,
+    lastDetectedAt: new Date().toLocaleTimeString([], { hour12: false }),
   };
 }

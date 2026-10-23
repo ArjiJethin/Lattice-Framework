@@ -11,6 +11,10 @@ import { ConfigurationCandidate } from '../../types';
 import { Button } from '../ui/primitives';
 import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 
+// Framed to center the 3D topology in the open viewport between the 200px left legend and 352px right inspector
+const INITIAL_CAMERA_POSITION: [number, number, number] = [14.6, 11.8, 15.7];
+const INITIAL_CAMERA_TARGET: [number, number, number] = [1.25, 0.55, -0.85];
+
 interface ErrorBoundaryProps {
   children: ReactNode;
 }
@@ -78,8 +82,8 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
   const resetCamera = () => {
     if (controlsRef.current) {
       controlsRef.current.reset();
-      controlsRef.current.object.position.set(13.2, 10.8, 14.2);
-      controlsRef.current.target.set(0.1, 0.55, 0.2);
+      controlsRef.current.object.position.set(...INITIAL_CAMERA_POSITION);
+      controlsRef.current.target.set(...INITIAL_CAMERA_TARGET);
       controlsRef.current.update();
     }
   };
@@ -94,13 +98,13 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
   };
 
   return (
-    <div className="relative w-full h-full select-none overflow-hidden bg-[radial-gradient(ellipse_at_50%_42%,_#FFFFFF_0%,_#F1F4F9_58%,_#E4E9F2_100%)] border-b border-[#D9DEE7]">
+    <div className="relative w-full h-full select-none overflow-hidden bg-[radial-gradient(ellipse_at_46%_42%,_#FFFFFF_0%,_#F1F4F9_58%,_#E4E9F2_100%)] border-b border-[#D9DEE7]">
       <WebGLErrorBoundary>
         <Canvas
           shadows
           dpr={[1, 1.5]}
           camera={{
-            position: [13.2, 10.8, 14.2],
+            position: INITIAL_CAMERA_POSITION,
             fov: 28,
             near: 0.5,
             far: 80,
@@ -117,13 +121,13 @@ export const LatticeCanvas: React.FC<LatticeCanvasProps> = ({
         >
           <OrbitControls
             ref={controlsRef}
-            target={[0.1, 0.55, 0.2]}
+            target={INITIAL_CAMERA_TARGET}
             enableDamping
             dampingFactor={0.08}
             enableZoom={true}
             zoomSpeed={0.85}
             minDistance={8}
-            maxDistance={32}
+            maxDistance={36}
             minPolarAngle={Math.PI / 6}
             maxPolarAngle={Math.PI / 2.35}
             rotateSpeed={0.65}
