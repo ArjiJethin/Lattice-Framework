@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { OverviewMetrics, PerformanceTrendPoint } from '../../types';
-import { Zap, Gauge, Cpu, Maximize2, ArrowDown, ArrowUp } from 'lucide-react';
+import { Zap, Gauge, Cpu, ArrowDown, ArrowUp } from 'lucide-react';
 
 interface CompactMetricsStripProps {
   metrics: OverviewMetrics;
@@ -15,7 +15,6 @@ export const CompactMetricsStrip: React.FC<CompactMetricsStripProps> = ({
 }) => {
   const hasHistory = historicalPoints.length >= 2;
 
-  // Compute dynamic SVG sparkline paths from real historical points
   const latencySparkline = useMemo(() => {
     if (!hasHistory) return null;
     const pts = historicalPoints.slice(-8);
@@ -65,50 +64,49 @@ export const CompactMetricsStrip: React.FC<CompactMetricsStripProps> = ({
   }, [historicalPoints, hasHistory]);
 
   return (
-    <div className="flex flex-col gap-1.5 select-none">
-      {/* Provenance Header Badge */}
-      <div className="flex items-center justify-between px-1 text-[10px] text-slate-400 font-medium">
-        <span className="uppercase tracking-wider font-bold text-slate-500 text-[10px]">
+    <div className="flex flex-col gap-2 select-none">
+      {/* Provenance Header */}
+      <div className="flex items-center justify-between px-0.5 text-[11px] text-[#647187]">
+        <span className="uppercase tracking-wider font-semibold text-[#647187]">
           Inference Summary · Active Runtime (Qwen3-1.7B · Q4_K_M)
         </span>
         {dataSourceLabel && (
-          <span className="flex items-center gap-1.5 text-slate-500 font-mono text-[10px]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#7C6AF2]" />
+          <span className="flex items-center gap-1.5 text-[#647187] font-mono text-[11px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#7562E8]" />
             <span>{dataSourceLabel}</span>
           </span>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* 1. Inference Latency Card */}
-        <div className="p-3 rounded-[16px] bg-white/85 backdrop-blur-xl border border-white shadow-[0_4px_16px_rgba(15,23,42,0.04)] flex flex-col justify-between">
-          <div className="flex items-start gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-[#F3F0FF] text-[#7C6AF2] flex items-center justify-center shrink-0">
-              <Zap className="w-4 h-4 stroke-[1.8]" />
-            </div>
+        <div className="p-3.5 rounded-lg bg-white border border-[#D9DEE7] shadow-2xs flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-2">
             <div>
-              <span className="text-[11px] font-medium text-slate-500 block">
+              <span className="text-[12px] font-medium text-[#647187] block">
                 Inference Latency
               </span>
-              <div className="text-[19px] leading-tight font-extrabold text-[#18213B] tracking-tight mt-0.5">
+              <div className="text-[20px] leading-tight font-semibold text-[#222938] tracking-tight mt-1 tabular-nums">
                 {metrics.inferenceLatencyMs !== null ? (
                   <>
                     {metrics.inferenceLatencyMs}{' '}
-                    <span className="text-[13px] font-bold">ms</span>
+                    <span className="text-[13px] font-medium text-[#647187]">ms</span>
                   </>
                 ) : (
-                  <span className="text-slate-400 text-sm font-normal italic">— Unmeasured</span>
+                  <span className="text-[#8A94A6] text-[13px] font-normal">Unmeasured</span>
                 )}
               </div>
             </div>
+            <div className="w-7 h-7 rounded-md bg-[#F8F9FB] border border-[#E6EAF0] text-[#7562E8] flex items-center justify-center shrink-0">
+              <Zap className="w-3.5 h-3.5" />
+            </div>
           </div>
 
-          <div className="flex items-end justify-between mt-1.5 pl-9">
+          <div className="flex items-end justify-between mt-3 pt-2 border-t border-[#E6EAF0]">
             {metrics.inferenceLatencyChangePct !== null ? (
               <div
-                className={`flex items-center gap-0.5 text-[11px] font-bold ${
-                  metrics.inferenceLatencyChangePct <= 0 ? 'text-[#10B981]' : 'text-rose-500'
-                }`}
+                className={`flex items-center gap-0.5 text-[11.5px] font-mono font-semibold tabular-nums ${metrics.inferenceLatencyChangePct <= 0 ? 'text-[#0D8A58]' : 'text-[#DC2626]'
+                  }`}
               >
                 {metrics.inferenceLatencyChangePct <= 0 ? (
                   <ArrowDown className="w-3 h-3 stroke-[2.5]" />
@@ -118,30 +116,29 @@ export const CompactMetricsStrip: React.FC<CompactMetricsStripProps> = ({
                 <span>{Math.abs(metrics.inferenceLatencyChangePct)}%</span>
               </div>
             ) : (
-              <span className="text-[10px] text-slate-400 font-medium">Baseline</span>
+              <span className="text-[11px] text-[#8A94A6]">Baseline</span>
             )}
 
-            {/* Sparkline only rendered when sufficient historical runs exist */}
             {latencySparkline ? (
               <svg className="w-24 h-6 overflow-visible" viewBox="0 0 96 24">
                 <defs>
                   <linearGradient id="latencyGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#8174F5" stopOpacity="0.25" />
-                    <stop offset="100%" stopColor="#8174F5" stopOpacity="0.0" />
+                    <stop offset="0%" stopColor="#7562E8" stopOpacity="0.18" />
+                    <stop offset="100%" stopColor="#7562E8" stopOpacity="0.0" />
                   </linearGradient>
                 </defs>
                 <polygon points={latencySparkline.area} fill="url(#latencyGrad)" />
                 <polyline
                   points={latencySparkline.polyline}
                   fill="none"
-                  stroke="#7C6AF2"
-                  strokeWidth="2"
+                  stroke="#7562E8"
+                  strokeWidth="1.75"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               </svg>
             ) : (
-              <span className="text-[9.5px] text-slate-400 italic font-mono">
+              <span className="text-[10.5px] text-[#8A94A6] font-mono">
                 {hasHistory ? '' : 'No history'}
               </span>
             )}
@@ -149,34 +146,33 @@ export const CompactMetricsStrip: React.FC<CompactMetricsStripProps> = ({
         </div>
 
         {/* 2. Generation Speed Card */}
-        <div className="p-3 rounded-[16px] bg-white/85 backdrop-blur-xl border border-white shadow-[0_4px_16px_rgba(15,23,42,0.04)] flex flex-col justify-between">
-          <div className="flex items-start gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-[#F0F4FF] text-[#6366F1] flex items-center justify-center shrink-0">
-              <Gauge className="w-4 h-4 stroke-[1.8]" />
-            </div>
+        <div className="p-3.5 rounded-lg bg-white border border-[#D9DEE7] shadow-2xs flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-2">
             <div>
-              <span className="text-[11px] font-medium text-slate-500 block">
+              <span className="text-[12px] font-medium text-[#647187] block">
                 Generation Speed
               </span>
-              <div className="text-[19px] leading-tight font-extrabold text-[#18213B] tracking-tight mt-0.5">
+              <div className="text-[20px] leading-tight font-semibold text-[#222938] tracking-tight mt-1 tabular-nums">
                 {metrics.generationSpeedToks !== null ? (
                   <>
                     {metrics.generationSpeedToks}{' '}
-                    <span className="text-[13px] font-bold">tok/s</span>
+                    <span className="text-[13px] font-medium text-[#647187]">tok/s</span>
                   </>
                 ) : (
-                  <span className="text-slate-400 text-sm font-normal italic">— Evaluating</span>
+                  <span className="text-[#8A94A6] text-[13px] font-normal">Evaluating</span>
                 )}
               </div>
             </div>
+            <div className="w-7 h-7 rounded-md bg-[#F8F9FB] border border-[#E6EAF0] text-[#2563EB] flex items-center justify-center shrink-0">
+              <Gauge className="w-3.5 h-3.5" />
+            </div>
           </div>
 
-          <div className="flex items-end justify-between mt-1.5 pl-9">
+          <div className="flex items-end justify-between mt-3 pt-2 border-t border-[#E6EAF0]">
             {metrics.generationSpeedChangePct !== null ? (
               <div
-                className={`flex items-center gap-0.5 text-[11px] font-bold ${
-                  metrics.generationSpeedChangePct >= 0 ? 'text-[#10B981]' : 'text-rose-500'
-                }`}
+                className={`flex items-center gap-0.5 text-[11.5px] font-mono font-semibold tabular-nums ${metrics.generationSpeedChangePct >= 0 ? 'text-[#0D8A58]' : 'text-[#DC2626]'
+                  }`}
               >
                 {metrics.generationSpeedChangePct >= 0 ? (
                   <ArrowUp className="w-3 h-3 stroke-[2.5]" />
@@ -186,30 +182,29 @@ export const CompactMetricsStrip: React.FC<CompactMetricsStripProps> = ({
                 <span>{metrics.generationSpeedChangePct}%</span>
               </div>
             ) : (
-              <span className="text-[10px] text-slate-400 font-medium">Baseline</span>
+              <span className="text-[11px] text-[#8A94A6]">Baseline</span>
             )}
 
-            {/* Sparkline only rendered when sufficient historical runs exist */}
             {throughputSparkline ? (
               <svg className="w-24 h-6 overflow-visible" viewBox="0 0 96 24">
                 <defs>
                   <linearGradient id="speedGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.25" />
-                    <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.0" />
+                    <stop offset="0%" stopColor="#2563EB" stopOpacity="0.18" />
+                    <stop offset="100%" stopColor="#2563EB" stopOpacity="0.0" />
                   </linearGradient>
                 </defs>
                 <polygon points={throughputSparkline.area} fill="url(#speedGrad)" />
                 <polyline
                   points={throughputSparkline.polyline}
                   fill="none"
-                  stroke="#3B82F6"
-                  strokeWidth="2"
+                  stroke="#2563EB"
+                  strokeWidth="1.75"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               </svg>
             ) : (
-              <span className="text-[9.5px] text-slate-400 italic font-mono">
+              <span className="text-[10.5px] text-[#8A94A6] font-mono">
                 {hasHistory ? '' : 'No history'}
               </span>
             )}
@@ -217,48 +212,38 @@ export const CompactMetricsStrip: React.FC<CompactMetricsStripProps> = ({
         </div>
 
         {/* 3. GPU Memory Card */}
-        <div className="p-3 rounded-[16px] bg-white/85 backdrop-blur-xl border border-white shadow-[0_4px_16px_rgba(15,23,42,0.04)] flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-[#F3F0FF] text-[#7C6AF2] flex items-center justify-center shrink-0">
-                <Cpu className="w-4 h-4 stroke-[1.8]" />
-              </div>
-              <div>
-                <span className="text-[11px] font-medium text-slate-500 block">
-                  GPU Memory
-                </span>
-                <div className="text-[19px] leading-tight font-extrabold text-[#18213B] tracking-tight mt-0.5">
-                  {metrics.gpuMemoryUsedGb !== null ? (
-                    <>
-                      {metrics.gpuMemoryUsedGb.toFixed(1)} GB{' '}
-                      <span className="text-[13px] font-normal text-slate-400">
-                        / {metrics.gpuMemoryTotalGb} GB
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-slate-400 text-sm font-normal italic">— Unallocated</span>
-                  )}
-                </div>
+        <div className="p-3.5 rounded-lg bg-white border border-[#D9DEE7] shadow-2xs flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <span className="text-[12px] font-medium text-[#647187] block">
+                GPU Memory
+              </span>
+              <div className="text-[20px] leading-tight font-semibold text-[#222938] tracking-tight mt-1 tabular-nums">
+                {metrics.gpuMemoryUsedGb !== null ? (
+                  <>
+                    {metrics.gpuMemoryUsedGb.toFixed(1)} GB{' '}
+                    <span className="text-[13px] font-normal text-[#647187]">
+                      / {metrics.gpuMemoryTotalGb.toFixed(1)} GB
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[#8A94A6] text-[13px] font-normal">Unallocated</span>
+                )}
               </div>
             </div>
-
-            <button
-              title="GPU Resource details"
-              className="text-slate-400 hover:text-[#18213B] transition-colors p-1 rounded-md"
-            >
-              <Maximize2 className="w-3 h-3" />
-            </button>
+            <div className="w-7 h-7 rounded-md bg-[#F8F9FB] border border-[#E6EAF0] text-[#0D8A58] flex items-center justify-center shrink-0">
+              <Cpu className="w-3.5 h-3.5" />
+            </div>
           </div>
 
-          {/* Inline Progress Bar & Percentage */}
-          <div className="flex items-center gap-2.5 mt-2 pt-0.5">
-            <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+          <div className="flex items-center gap-2.5 mt-3 pt-2 border-t border-[#E6EAF0]">
+            <div className="flex-1 h-2 rounded-sm bg-[#EEF1F6] overflow-hidden border border-[#D9DEE7]/60">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#7C6AF2] to-[#A78BFA] transition-all duration-500"
+                className="h-full bg-[#7562E8] transition-all duration-300"
                 style={{ width: `${metrics.gpuMemoryUsagePct || 0}%` }}
               />
             </div>
-            <span className="text-[11px] font-semibold text-slate-500 shrink-0">
+            <span className="text-[11.5px] font-mono font-semibold text-[#222938] tabular-nums shrink-0">
               {metrics.gpuMemoryUsagePct !== null ? `${metrics.gpuMemoryUsagePct}%` : '—'}
             </span>
           </div>

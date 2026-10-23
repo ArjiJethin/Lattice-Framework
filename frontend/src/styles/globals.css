@@ -1,39 +1,49 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 216 20% 95%;       /* #F1F3F6 */
-    --foreground: 224 42% 16%;       /* #18213B */
-    
+    --background: 220 14% 97%;
+    /* #F5F6F8 - Application Canvas */
+    --foreground: 221 24% 18%;
+    /* #222938 - Primary Text */
+
     --card: 0 0% 100%;
-    --card-foreground: 224 42% 16%;
-    
+    /* #FFFFFF - Primary Surface */
+    --card-foreground: 221 24% 18%;
+
     --popover: 0 0% 100%;
-    --popover-foreground: 224 42% 16%;
-    
-    --primary: 246 87% 71%;          /* #8174F5 */
+    --popover-foreground: 221 24% 18%;
+
+    --primary: 249 74% 65%;
+    /* #7562E8 - Primary Accent */
     --primary-foreground: 0 0% 100%;
-    
-    --secondary: 217 33% 97%;        /* #F1F5F9 */
-    --secondary-foreground: 224 42% 16%;
-    
-    --muted: 215 25% 93%;
-    --muted-foreground: 218 18% 46%; /* #64748B */
-    
-    --accent: 247 100% 96%;          /* #EEEBFF */
-    --accent-foreground: 246 87% 65%;
-    
-    --destructive: 0 84% 60%;
+
+    --secondary: 220 20% 98%;
+    /* #F8F9FB - Secondary Surface */
+    --secondary-foreground: 221 24% 18%;
+
+    --muted: 218 19% 94%;
+    /* #EDEFF3 */
+    --muted-foreground: 218 15% 46%;
+    /* #647187 - Secondary Text */
+
+    --accent: 249 80% 97%;
+    /* #F2F0FD - Subtle Active Surface */
+    --accent-foreground: 249 74% 58%;
+
+    --destructive: 0 72% 51%;
+    /* #DC2626 */
     --destructive-foreground: 0 0% 100%;
-    
-    --border: 220 13% 91%;           /* #E2E8F0 */
-    --input: 220 13% 91%;
-    --ring: 246 87% 71%;
-    --radius: 0.85rem;
+
+    --border: 219 18% 88%;
+    /* #D9DEE7 - Crisp 1px Border */
+    --input: 219 18% 88%;
+    --ring: 249 74% 65%;
+    /* #7562E8 - Focus Ring */
+    --radius: 0.5rem;
+    /* 8px base panel radius */
   }
 }
 
@@ -41,79 +51,121 @@
   * {
     @apply border-border;
   }
+
   body {
-    @apply bg-[#F1F3F6] text-[#18213B] antialiased select-none;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #F5F6F8;
+    color: #222938;
+    font-family: 'Inter', 'Geist Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    user-select: none;
+  }
+
+  /* Consistent accessible keyboard focus ring across all interactive elements */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [role="switch"]:focus-visible,
+  [role="tab"]:focus-visible {
+    outline: 2px solid #7562E8;
+    outline-offset: 1px;
   }
 }
 
-/* Atmospheric subtle underhue for the window */
+/* Application Workspace Background - Clean neutral engineering canvas */
 .lattice-window-bg {
-  background-color: #F1F3F6;
-  background-image: 
-    radial-gradient(at 10% 10%, rgba(129, 116, 245, 0.04) 0px, transparent 45%),
-    radial-gradient(at 90% 20%, rgba(85, 152, 247, 0.05) 0px, transparent 50%),
-    radial-gradient(at 50% 90%, rgba(16, 185, 129, 0.03) 0px, transparent 50%);
+  background-color: #F5F6F8;
 }
 
-/* Premium High-Fidelity Glassmorphism */
+/* Standardized Surface Classes (Replacing heavy decorative blur/glows with crisp 1px borders) */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.92);
-  box-shadow: 
-    0 8px 32px -4px rgba(24, 33, 59, 0.05),
-    0 2px 8px -1px rgba(24, 33, 59, 0.02),
-    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.95);
+  background: #FFFFFF;
+  border: 1px solid #D9DEE7;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.03);
 }
 
 .glass-card {
-  background: rgba(255, 255, 255, 0.86);
-  backdrop-filter: blur(14px) saturate(170%);
-  -webkit-backdrop-filter: blur(14px) saturate(170%);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 
-    0 4px 20px -2px rgba(24, 33, 59, 0.04),
-    0 1px 4px -1px rgba(24, 33, 59, 0.02),
-    inset 0 1px 1px 0 rgba(255, 255, 255, 1);
+  background: #FFFFFF;
+  border: 1px solid #D9DEE7;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.02);
 }
 
 .glass-floating {
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(20px) saturate(190%);
-  -webkit-backdrop-filter: blur(20px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, 0.98);
-  box-shadow: 
-    0 16px 40px -8px rgba(24, 33, 59, 0.09),
-    0 4px 14px -2px rgba(24, 33, 59, 0.03),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 1);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid #D9DEE7;
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
 }
 
 .glass-subtle {
-  background: rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.75);
+  background: #F8F9FB;
+  border: 1px solid #E6EAF0;
 }
 
 .glass-interactive {
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .glass-interactive:hover {
-  background: rgba(255, 255, 255, 0.95);
-  border-color: rgba(255, 255, 255, 1);
-  box-shadow: 
-    0 12px 36px -4px rgba(129, 116, 245, 0.12),
-    0 4px 12px 0 rgba(24, 33, 59, 0.04),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 1);
+  background: #FFFFFF;
+  border-color: #C3CBD8;
+  box-shadow: 0 2px 6px 0 rgba(15, 23, 42, 0.04);
 }
 
-/* Custom scrollbars */
+/* Tabular Numerals for Engineering Metrics & Benchmarks */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Technical Range Slider Styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: #E2E6EE;
+  height: 6px;
+  border-radius: 3px;
+  border: 1px solid #D0D7E2;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: #7562E8;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  background: #634FDB;
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(0.95);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: #7562E8;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+  cursor: pointer;
+}
+
+/* Technical Scrollbars */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -121,10 +173,22 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.3);
-  border-radius: 9999px;
+  background: #CBD2DF;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.5);
+  background: #94A3B8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

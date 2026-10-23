@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   OptimizationCandidate,
   OptimizationConstraints,
@@ -7,11 +7,13 @@ import {
 import { ParetoPlotView } from './ParetoPlotView';
 import { PerformanceTableView } from './PerformanceTableView';
 import { MetricsComparisonView } from './MetricsComparisonView';
-import { ScatterChart, Table2, BarChart3, ChevronDown } from 'lucide-react';
+import { SegmentedTabs, StatusBadge } from '../ui/primitives';
+import { ScatterChart, Table2, BarChart3 } from 'lucide-react';
 
 interface CandidateStatisticsProps {
   candidates: OptimizationCandidate[];
   selectedCandidate: OptimizationCandidate | null;
+  recommendedCandidateId: string | null;
   onSelectCandidate: (candidate: OptimizationCandidate) => void;
   constraints: OptimizationConstraints;
 }
@@ -19,91 +21,99 @@ interface CandidateStatisticsProps {
 export const CandidateStatistics: React.FC<CandidateStatisticsProps> = ({
   candidates,
   selectedCandidate,
+  recommendedCandidateId,
   onSelectCandidate,
   constraints,
 }) => {
   const [activeTab, setActiveTab] = useState<CandidateStatisticsTab>('plot');
 
+  const counts = useMemo(() => {
+    const activeModelCands = candidates.filter((c) => c.isCurrentModelVariant);
+    return {
+      total: activeModelCands.length,
+      feasible: activeModelCands.filter((c) => c.status === 'feasible').length,
+      nearFeasible: activeModelCands.filter((c) => c.status === 'near_feasible').length,
+      rejected: activeModelCands.filter((c) => c.status === 'rejected').length,
+      unprofiled: activeModelCands.filter((c) => c.status === 'unprofiled').length,
+    };
+  }, [candidates]);
+
   return (
-    <div className="w-full bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-xs p-5 transition-all flex flex-col gap-4">
-      {/* Top Header Row with Title and View Controls matching screenshot */}
-      <div className="flex items-start justify-between flex-wrap gap-3 pb-3 border-b border-slate-100">
+    <div className="w-full bg-white rounded-lg border border-[#D9DEE7] shadow-2xs p-4 flex flex-col gap-3">
+      {/* Header & Feasibility Summary Pills */}
+      <div className="flex items-start justify-between pb-2.5 border-b border-[#E6EAF0] flex-wrap gap-2">
         <div>
-          <h2 className="text-base font-extrabold text-[#18213B] tracking-tight">
-            2. Candidate Statistics
+          <h2 className="text-[15px] font-semibold text-[#222938] tracking-tight">
+            2. Candidate Analysis &amp; Trade-Offs
           </h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Measured profiles for available configurations of the selected model.
+          <p className="text-[12px] text-[#647187] mt-0.5">
+            Inspect memory, latency, throughput, and quality trade-offs across configurations.
           </p>
         </div>
 
-        {/* Top Right: Axis & Color Selection Pills (Matching screenshot) */}
-        <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 flex-wrap">
-          <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80">
-            <span className="text-slate-400">X:</span>
-            <span>Memory Usage</span>
-            <ChevronDown className="w-3 h-3 text-slate-400" />
-          </div>
-
-          <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80">
-            <span className="text-slate-400">Y:</span>
-            <span>Inference Latency</span>
-            <ChevronDown className="w-3 h-3 text-slate-400" />
-          </div>
-
-          <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80">
-            <span className="text-slate-400">Color:</span>
-            <span>Quality Score</span>
-            <ChevronDown className="w-3 h-3 text-slate-400" />
-          </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <StatusBadge tone="success">
+            <span className="font-mono tabular-nums">{counts.feasible}</span> Feasible
+          </StatusBadge>
+          {counts.nearFeasible > 0 && (
+            <StatusBadge tone="warning">
+              <span className="font-mono tabular-nums">{counts.nearFeasible}</span> Near
+            </StatusBadge>
+          )}
+          <StatusBadge tone="danger">
+            <span className="font-mono tabular-nums">{counts.rejected}</span> Rejected
+          </StatusBadge>
+          <StatusBadge tone="neutral">
+            <span className="font-mono tabular-nums">{counts.unprofiled}</span> Unprofiled
+          </StatusBadge>
         </div>
       </div>
 
-      {/* View Switcher Pill Tabs matching screenshot */}
-      <div className="flex items-center gap-1.5 self-start bg-slate-100/80 p-1 rounded-xl">
-        <button
-          onClick={() => setActiveTab('plot')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'plot'
-              ? 'bg-[#7C6AF2] text-white shadow-2xs'
-              : 'text-slate-600 hover:text-[#18213B]'
-          }`}
-        >
-          <ScatterChart className="w-3.5 h-3.5" />
-          <span>Pareto Plot</span>
-        </button>
+      {/* View Switcher Bar */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <SegmentedTabs
+          value={activeTab}
+          onChange={(tab) => setActiveTab(tab)}
+          options={[
+            {
+              id: 'plot',
+              label: 'Pareto Plot',
+              icon: <ScatterChart className="w-3.5 h-3.5" />,
+            },
+            {
+              id: 'table',
+              label: 'Performance Table',
+              icon: <Table2 className="w-3.5 h-3.5" />,
+              count: counts.total,
+            },
+            {
+              id: 'comparison',
+              label: 'Metrics Comparison',
+              icon: <BarChart3 className="w-3.5 h-3.5" />,
+            },
+          ]}
+        />
 
-        <button
-          onClick={() => setActiveTab('table')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'table'
-              ? 'bg-[#7C6AF2] text-white shadow-2xs'
-              : 'text-slate-600 hover:text-[#18213B]'
-          }`}
-        >
-          <Table2 className="w-3.5 h-3.5" />
-          <span>Performance Table</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('comparison')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'comparison'
-              ? 'bg-[#7C6AF2] text-white shadow-2xs'
-              : 'text-slate-600 hover:text-[#18213B]'
-          }`}
-        >
-          <BarChart3 className="w-3.5 h-3.5" />
-          <span>Metrics Comparison</span>
-        </button>
+        <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#647187]">
+          <span className="px-1.5 py-0.5 rounded-sm bg-[#F8F9FB] border border-[#E6EAF0] tabular-nums">
+            Budget ≤ {constraints.maxMemoryGb.toFixed(1)} GB
+          </span>
+          <span className="px-1.5 py-0.5 rounded-sm bg-[#F8F9FB] border border-[#E6EAF0] tabular-nums">
+            Limit ≤ {constraints.maxLatencyMs} ms
+          </span>
+          <span className="px-1.5 py-0.5 rounded-sm bg-[#F8F9FB] border border-[#E6EAF0] tabular-nums">
+            Quality ≥ {constraints.minQualityScore}
+          </span>
+        </div>
       </div>
 
-      {/* Tab Content Display */}
+      {/* Active View Body */}
       <div className="w-full">
         {activeTab === 'plot' ? (
           <ParetoPlotView
             candidates={candidates}
             selectedCandidate={selectedCandidate}
+            recommendedCandidateId={recommendedCandidateId}
             onSelectCandidate={onSelectCandidate}
             constraints={constraints}
           />
@@ -111,12 +121,17 @@ export const CandidateStatistics: React.FC<CandidateStatisticsProps> = ({
           <PerformanceTableView
             candidates={candidates}
             selectedCandidate={selectedCandidate}
+            recommendedCandidateId={recommendedCandidateId}
             onSelectCandidate={onSelectCandidate}
+            constraints={constraints}
           />
         ) : (
           <MetricsComparisonView
             candidates={candidates}
             selectedCandidate={selectedCandidate}
+            recommendedCandidateId={recommendedCandidateId}
+            constraints={constraints}
+            onSelectCandidate={onSelectCandidate}
           />
         )}
       </div>

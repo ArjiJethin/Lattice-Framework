@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import * as echarts from 'echarts';
 import { PerformanceTrendData } from '../../types';
+import { Button } from '../ui/primitives';
 import {
   Maximize2,
   ChevronDown,
@@ -41,7 +42,6 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
 
   const activeTimeRange = currentTimeRange || trendData.timeRange || 'Last 30 runs';
 
-  // Clickable legend visibility state
   const [visibleSeries, setVisibleSeries] = useState<{
     latency: boolean;
     throughput: boolean;
@@ -53,13 +53,9 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
   });
 
   const toggleSeries = (key: 'latency' | 'throughput' | 'gpuMemory') => {
-    setVisibleSeries((prev) => {
-      // Toggle the selected series
-      return { ...prev, [key]: !prev[key] };
-    });
+    setVisibleSeries((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -88,16 +84,16 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
       series.push({
         name: 'Latency',
         type: 'line',
-        smooth: 0.25,
+        smooth: 0.2,
         showSymbol: trendData.points.length <= 15,
-        symbolSize: 6,
-        itemStyle: { color: '#7C6AF2', borderColor: '#FFFFFF', borderWidth: 2 },
-        lineStyle: { width: 2, color: '#7C6AF2' },
+        symbolSize: 5,
+        itemStyle: { color: '#7562E8', borderColor: '#FFFFFF', borderWidth: 1.5 },
+        lineStyle: { width: 1.75, color: '#7562E8' },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(124, 106, 242, 0.22)' },
-            { offset: 0.7, color: 'rgba(124, 106, 242, 0.04)' },
-            { offset: 1, color: 'rgba(124, 106, 242, 0.00)' },
+            { offset: 0, color: 'rgba(117, 98, 232, 0.16)' },
+            { offset: 0.8, color: 'rgba(117, 98, 232, 0.02)' },
+            { offset: 1, color: 'rgba(117, 98, 232, 0.00)' },
           ]),
         },
         data: latency,
@@ -108,16 +104,16 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
       series.push({
         name: 'Throughput',
         type: 'line',
-        smooth: 0.25,
+        smooth: 0.2,
         showSymbol: trendData.points.length <= 15,
-        symbolSize: 6,
-        itemStyle: { color: '#3B82F6', borderColor: '#FFFFFF', borderWidth: 2 },
-        lineStyle: { width: 1.8, color: '#3B82F6' },
+        symbolSize: 5,
+        itemStyle: { color: '#2563EB', borderColor: '#FFFFFF', borderWidth: 1.5 },
+        lineStyle: { width: 1.75, color: '#2563EB' },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(59, 130, 246, 0.16)' },
-            { offset: 0.7, color: 'rgba(59, 130, 246, 0.03)' },
-            { offset: 1, color: 'rgba(59, 130, 246, 0.00)' },
+            { offset: 0, color: 'rgba(37, 99, 235, 0.12)' },
+            { offset: 0.8, color: 'rgba(37, 99, 235, 0.02)' },
+            { offset: 1, color: 'rgba(37, 99, 235, 0.00)' },
           ]),
         },
         data: throughput,
@@ -129,16 +125,16 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
         name: 'GPU Memory',
         type: 'line',
         yAxisIndex: 1,
-        smooth: 0.25,
+        smooth: 0.2,
         showSymbol: trendData.points.length <= 15,
-        symbolSize: 6,
-        itemStyle: { color: '#10B981', borderColor: '#FFFFFF', borderWidth: 2 },
-        lineStyle: { width: 1.8, color: '#10B981' },
+        symbolSize: 5,
+        itemStyle: { color: '#0D8A58', borderColor: '#FFFFFF', borderWidth: 1.5 },
+        lineStyle: { width: 1.75, color: '#0D8A58' },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(16, 185, 129, 0.15)' },
-            { offset: 0.7, color: 'rgba(16, 185, 129, 0.03)' },
-            { offset: 1, color: 'rgba(16, 185, 129, 0.00)' },
+            { offset: 0, color: 'rgba(13, 138, 88, 0.12)' },
+            { offset: 0.8, color: 'rgba(13, 138, 88, 0.02)' },
+            { offset: 1, color: 'rgba(13, 138, 88, 0.00)' },
           ]),
         },
         data: gpuMemory.map((g) => g * 10),
@@ -147,20 +143,20 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
 
     return {
       backgroundColor: 'transparent',
-      animationDuration: 400,
+      animationDuration: 300,
       tooltip: {
         trigger: 'axis',
-        backgroundColor: 'rgba(255, 255, 255, 0.96)',
-        borderColor: 'rgba(226, 232, 240, 0.9)',
+        backgroundColor: 'rgba(255, 255, 255, 0.98)',
+        borderColor: '#D9DEE7',
         borderWidth: 1,
-        padding: [10, 14],
+        padding: [8, 12],
         textStyle: {
-          color: '#18213B',
-          fontSize: 12,
+          color: '#222938',
+          fontSize: 11.5,
           fontFamily: 'Inter, sans-serif',
         },
         extraCssText:
-          'box-shadow: 0 10px 28px rgba(15, 23, 42, 0.1); border-radius: 14px; backdrop-filter: blur(10px);',
+          'box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08); border-radius: 6px;',
         formatter: (
           params: Array<{
             seriesName: string;
@@ -170,8 +166,8 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
           }>
         ) => {
           if (!params || params.length === 0) return '';
-          const runNumber = runs[params[0].dataIndex] || `Run ${params[0].dataIndex}`;
-          let html = `<div style="font-weight: 700; margin-bottom: 6px; font-size: 11.5px; color: #18213B;">${runNumber}</div>`;
+          const runNumber = runs[params[0].dataIndex] || params[0].dataIndex + 1;
+          let html = `<div style="font-weight: 600; margin-bottom: 4px; font-size: 11px; color: #647187; font-family: monospace;">Run #${runNumber}</div>`;
           params.forEach((item) => {
             let unit = '';
             let val = item.value;
@@ -181,9 +177,9 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
               unit = ' GB';
               val = parseFloat((val / 10).toFixed(1));
             }
-            html += `<div style="display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-top: 4px; font-size: 11.5px;">
-              <span>${item.marker} <span style="color: #64748B;">${item.seriesName}</span></span>
-              <span style="font-weight: 700; color: #18213B;">${val}${unit}</span>
+            html += `<div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 3px; font-size: 11.5px;">
+              <span>${item.marker} <span style="color: #647187;">${item.seriesName}</span></span>
+              <span style="font-weight: 600; font-family: monospace; color: #222938;">${val}${unit}</span>
             </div>`;
           });
           return html;
@@ -191,17 +187,17 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
         axisPointer: {
           type: 'line',
           lineStyle: {
-            color: '#7C6AF2',
-            width: 1.5,
+            color: '#7562E8',
+            width: 1,
             type: 'dashed',
           },
         },
       },
       grid: {
         top: 12,
-        left: 28,
-        right: 24,
-        bottom: 18,
+        left: 30,
+        right: 26,
+        bottom: 20,
         containLabel: false,
       },
       xAxis: {
@@ -210,18 +206,19 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
         boundaryGap: false,
         axisLine: {
           show: true,
-          lineStyle: { color: '#E2E8F0' },
+          lineStyle: { color: '#D9DEE7' },
         },
         axisTick: { show: false },
         axisLabel: {
-          color: '#94A3B8',
-          fontSize: 9.5,
+          color: '#647187',
+          fontSize: 10,
+          fontFamily: 'JetBrains Mono, monospace',
           interval: Math.max(0, Math.floor(runs.length / 6)),
         },
         splitLine: {
           show: true,
           lineStyle: {
-            color: '#F1F5F9',
+            color: '#F1F3F7',
             type: 'solid',
           },
         },
@@ -233,14 +230,15 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
           axisLine: { show: false },
           axisTick: { show: false },
           axisLabel: {
-            color: '#94A3B8',
-            fontSize: 9.5,
+            color: '#647187',
+            fontSize: 10,
+            fontFamily: 'JetBrains Mono, monospace',
           },
           splitLine: {
             show: true,
             lineStyle: {
-              color: '#F1F5F9',
-              type: 'solid',
+              color: '#E6EAF0',
+              type: 'dashed',
             },
           },
         },
@@ -252,8 +250,9 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
           axisLine: { show: false },
           axisTick: { show: false },
           axisLabel: {
-            color: '#94A3B8',
-            fontSize: 9.5,
+            color: '#647187',
+            fontSize: 10,
+            fontFamily: 'JetBrains Mono, monospace',
           },
           splitLine: { show: false },
         },
@@ -265,29 +264,29 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
   const renderChartContent = () => {
     if (isLoading) {
       return (
-        <div className="w-full flex-1 min-h-[140px] flex flex-col items-center justify-center text-slate-400 gap-2">
-          <Loader2 className="w-6 h-6 animate-spin text-[#7C6AF2]" />
-          <span className="text-xs font-medium">Fetching performance trend telemetry...</span>
+        <div className="w-full flex-1 min-h-[140px] flex flex-col items-center justify-center text-[#647187] gap-2">
+          <Loader2 className="w-5 h-5 animate-spin text-[#7562E8]" />
+          <span className="text-[12px]">Loading performance trend telemetry...</span>
         </div>
       );
     }
 
     if (error) {
       return (
-        <div className="w-full flex-1 min-h-[140px] flex flex-col items-center justify-center text-amber-600 bg-amber-50/50 rounded-xl p-4 gap-1.5 border border-amber-200/60">
-          <AlertCircle className="w-5 h-5 text-amber-500" />
-          <span className="text-xs font-semibold">Failed to load trend data</span>
-          <span className="text-[11px] text-slate-500 text-center">{error}</span>
+        <div className="w-full flex-1 min-h-[140px] flex flex-col items-center justify-center text-[#B45309] bg-[#FFFBEB] rounded-md p-4 gap-1.5 border border-[#FDE68A]">
+          <AlertCircle className="w-4 h-4" />
+          <span className="text-[12px] font-semibold">Failed to load trend data</span>
+          <span className="text-[11px] text-[#647187] text-center">{error}</span>
         </div>
       );
     }
 
     if (trendData.points.length === 0) {
       return (
-        <div className="w-full flex-1 min-h-[140px] flex flex-col items-center justify-center text-slate-400 bg-slate-50/60 rounded-xl p-4 gap-1 border border-dashed border-slate-200">
-          <Activity className="w-5 h-5 text-slate-300 stroke-[1.5]" />
-          <span className="text-xs font-semibold text-slate-500">No trend measurements</span>
-          <span className="text-[11px] text-slate-400 text-center">
+        <div className="w-full flex-1 min-h-[140px] flex flex-col items-center justify-center text-[#647187] bg-[#F8F9FB] rounded-md p-4 gap-1 border border-dashed border-[#D9DEE7]">
+          <Activity className="w-5 h-5 text-[#8A94A6] stroke-[1.5]" />
+          <span className="text-[12px] font-semibold text-[#222938]">No trend measurements</span>
+          <span className="text-[11px] text-[#647187] text-center">
             No benchmark runs found for {activeTimeRange}.
           </span>
         </div>
@@ -297,26 +296,32 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
     if (trendData.points.length === 1) {
       const p = trendData.points[0];
       return (
-        <div className="w-full flex-1 min-h-[140px] flex flex-col justify-center bg-slate-50/70 rounded-xl p-3 border border-slate-200/70">
-          <div className="flex items-center gap-1.5 text-slate-600 text-[11px] font-semibold mb-2">
-            <Info className="w-3.5 h-3.5 text-[#7C6AF2]" />
-            <span>Single recorded run ({p.run})</span>
+        <div className="w-full flex-1 min-h-[140px] flex flex-col justify-center bg-[#F8F9FB] rounded-md p-3 border border-[#D9DEE7]">
+          <div className="flex items-center gap-1.5 text-[#222938] text-[11.5px] font-semibold mb-1.5">
+            <Info className="w-3.5 h-3.5 text-[#7562E8]" />
+            <span>Single recorded run (#{p.run})</span>
           </div>
-          <p className="text-[10.5px] text-slate-500 mb-2 leading-relaxed">
-            Historical trend lines require at least 2 recorded benchmark runs to plot progression.
+          <p className="text-[11px] text-[#647187] mb-2.5 leading-relaxed">
+            Historical trend lines require at least 2 recorded benchmark runs.
           </p>
           <div className="grid grid-cols-3 gap-2">
-            <div className="p-2 rounded-lg bg-white border border-slate-200/80 text-center">
-              <span className="text-[10px] text-slate-400 block">Latency</span>
-              <span className="text-[13px] font-bold text-[#18213B]">{p.latencyMs} ms</span>
+            <div className="p-2 rounded-sm bg-white border border-[#D9DEE7] text-center">
+              <span className="text-[10px] text-[#647187] block">Latency</span>
+              <span className="text-[12.5px] font-mono font-semibold text-[#222938] tabular-nums">
+                {p.latencyMs} ms
+              </span>
             </div>
-            <div className="p-2 rounded-lg bg-white border border-slate-200/80 text-center">
-              <span className="text-[10px] text-slate-400 block">Throughput</span>
-              <span className="text-[13px] font-bold text-[#18213B]">{p.throughputToks} tok/s</span>
+            <div className="p-2 rounded-sm bg-white border border-[#D9DEE7] text-center">
+              <span className="text-[10px] text-[#647187] block">Throughput</span>
+              <span className="text-[12.5px] font-mono font-semibold text-[#222938] tabular-nums">
+                {p.throughputToks} tok/s
+              </span>
             </div>
-            <div className="p-2 rounded-lg bg-white border border-slate-200/80 text-center">
-              <span className="text-[10px] text-slate-400 block">GPU Memory</span>
-              <span className="text-[13px] font-bold text-[#18213B]">{p.gpuMemoryGb.toFixed(1)} GB</span>
+            <div className="p-2 rounded-sm bg-white border border-[#D9DEE7] text-center">
+              <span className="text-[10px] text-[#647187] block">GPU Memory</span>
+              <span className="text-[12.5px] font-mono font-semibold text-[#222938] tabular-nums">
+                {p.gpuMemoryGb.toFixed(1)} GB
+              </span>
             </div>
           </div>
         </div>
@@ -326,7 +331,7 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
     if (!option) return null;
 
     return (
-      <div className="w-full flex-1 min-h-[220px] mt-1">
+      <div className="w-full flex-1 min-h-[210px] mt-1">
         <ReactECharts
           option={option}
           style={{ height: '100%', width: '100%' }}
@@ -338,142 +343,137 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
 
   return (
     <>
-      <div className="p-4 rounded-[20px] bg-white/85 backdrop-blur-xl border border-white shadow-[0_4px_16px_rgba(15,23,42,0.04)] flex flex-col justify-between select-none min-h-[380px] h-full">
+      <div className="p-4 rounded-lg bg-white border border-[#D9DEE7] shadow-2xs flex flex-col justify-between select-none min-h-[360px] h-full">
         <div>
-          {/* Title & Controls */}
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-[#E6EAF0]">
             <div className="flex items-center gap-2">
-              <h3 className="text-[13.5px] font-bold text-[#18213B] tracking-tight">
+              <h3 className="text-[14px] font-semibold text-[#222938] tracking-tight">
                 Performance Trends
               </h3>
-              <span className="text-[10px] text-slate-400 font-mono">
-                {trendData.points.length} runs
+              <span className="text-[11px] text-[#647187] font-mono tabular-nums">
+                ({trendData.points.length})
               </span>
             </div>
 
             <div className="flex items-center gap-1.5 relative">
-              {/* Range Selector Dropdown */}
               <div className="relative" ref={dropdownRef}>
                 <button
+                  type="button"
                   onClick={() => setShowRangeDropdown(!showRangeDropdown)}
-                  className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-slate-50/90 hover:bg-slate-100 border border-slate-200/80 text-[11px] font-semibold text-[#18213B] transition-colors"
+                  className="flex items-center gap-1.5 h-7 px-2.5 rounded-sm bg-[#F8F9FB] hover:bg-[#EDEFF3] border border-[#D9DEE7] text-[11.5px] font-medium text-[#222938] transition-colors cursor-pointer"
                 >
                   <span>{activeTimeRange}</span>
-                  <ChevronDown className="w-3 h-3 text-slate-400" />
+                  <ChevronDown className="w-3 h-3 text-[#647187]" />
                 </button>
 
                 {showRangeDropdown && (
-                  <div className="absolute right-0 top-full mt-1 w-36 rounded-xl bg-white shadow-lg border border-slate-200/90 py-1 z-50 text-[11px]">
+                  <div className="absolute right-0 top-full mt-1 w-36 rounded-md bg-white shadow-glass border border-[#D9DEE7] py-1 z-50 text-[11.5px]">
                     {AVAILABLE_RANGES.map((rng) => (
                       <button
                         key={rng}
+                        type="button"
                         onClick={() => {
                           onRangeChange?.(rng);
                           setShowRangeDropdown(false);
                         }}
-                        className={`w-full px-2.5 py-1.5 text-left flex items-center justify-between transition-colors ${
-                          activeTimeRange === rng
-                            ? 'bg-[#F3F0FF] text-[#7C6AF2] font-semibold'
-                            : 'text-slate-700 hover:bg-slate-50'
-                        }`}
+                        className={`w-full px-2.5 py-1.5 text-left flex items-center justify-between transition-colors cursor-pointer ${activeTimeRange === rng
+                            ? 'bg-[#F2F0FD] text-[#634FDB] font-semibold'
+                            : 'text-[#222938] hover:bg-[#F8F9FB]'
+                          }`}
                       >
                         <span>{rng}</span>
-                        {activeTimeRange === rng && <Check className="w-3 h-3 text-[#7C6AF2]" />}
+                        {activeTimeRange === rng && <Check className="w-3.5 h-3.5 text-[#7562E8]" />}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* Expand Modal Button */}
               <button
+                type="button"
                 onClick={() => setIsExpanded(true)}
+                aria-label="Expand Chart View"
                 title="Expand Chart View"
-                className="p-1 rounded-lg bg-slate-50/90 hover:bg-slate-100 border border-slate-200/80 text-slate-500 hover:text-[#18213B] transition-colors"
+                className="h-7 w-7 rounded-sm bg-[#F8F9FB] hover:bg-[#EDEFF3] border border-[#D9DEE7] flex items-center justify-center text-[#647187] hover:text-[#222938] transition-colors cursor-pointer"
               >
                 <Maximize2 className="w-3 h-3" />
               </button>
             </div>
           </div>
 
-          {/* Clickable Legend: Toggles Series Visibility */}
-          <div className="flex items-center gap-2 text-[10.5px] font-medium mb-1 flex-wrap">
+          {/* Series Visibility Toggles */}
+          <div className="flex items-center gap-1.5 text-[11px] font-medium mb-1 flex-wrap">
             <button
+              type="button"
               onClick={() => toggleSeries('latency')}
-              title="Click to toggle Latency series"
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full transition-all cursor-pointer ${
-                visibleSeries.latency
-                  ? 'bg-[#F3F0FF] text-[#18213B] font-semibold border border-[#7C6AF2]/30 shadow-xs'
-                  : 'bg-slate-100/70 text-slate-400 opacity-60 border border-slate-200/60 line-through'
-              }`}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-sm border transition-colors cursor-pointer ${visibleSeries.latency
+                  ? 'bg-[#F2F0FD] text-[#222938] font-semibold border-[#D8D1FA]'
+                  : 'bg-[#F8F9FB] text-[#8A94A6] border-[#E6EAF0] line-through'
+                }`}
             >
               <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  visibleSeries.latency ? 'bg-[#7C6AF2]' : 'bg-slate-400'
-                }`}
+                className={`w-1.5 h-1.5 rounded-full ${visibleSeries.latency ? 'bg-[#7562E8]' : 'bg-[#CBD2DF]'
+                  }`}
               />
               <span>Latency (ms)</span>
             </button>
 
             <button
+              type="button"
               onClick={() => toggleSeries('throughput')}
-              title="Click to toggle Throughput series"
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full transition-all cursor-pointer ${
-                visibleSeries.throughput
-                  ? 'bg-[#EFF6FF] text-[#18213B] font-semibold border border-[#3B82F6]/30 shadow-xs'
-                  : 'bg-slate-100/70 text-slate-400 opacity-60 border border-slate-200/60 line-through'
-              }`}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-sm border transition-colors cursor-pointer ${visibleSeries.throughput
+                  ? 'bg-[#EFF6FF] text-[#222938] font-semibold border-[#BFDBFE]'
+                  : 'bg-[#F8F9FB] text-[#8A94A6] border-[#E6EAF0] line-through'
+                }`}
             >
               <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  visibleSeries.throughput ? 'bg-[#3B82F6]' : 'bg-slate-400'
-                }`}
+                className={`w-1.5 h-1.5 rounded-full ${visibleSeries.throughput ? 'bg-[#2563EB]' : 'bg-[#CBD2DF]'
+                  }`}
               />
               <span>Throughput (tok/s)</span>
             </button>
 
             <button
+              type="button"
               onClick={() => toggleSeries('gpuMemory')}
-              title="Click to toggle GPU Memory series"
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full transition-all cursor-pointer ${
-                visibleSeries.gpuMemory
-                  ? 'bg-[#ECFDF5] text-[#18213B] font-semibold border border-[#10B981]/30 shadow-xs'
-                  : 'bg-slate-100/70 text-slate-400 opacity-60 border border-slate-200/60 line-through'
-              }`}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-sm border transition-colors cursor-pointer ${visibleSeries.gpuMemory
+                  ? 'bg-[#ECFDF5] text-[#222938] font-semibold border-[#A7F3D0]'
+                  : 'bg-[#F8F9FB] text-[#8A94A6] border-[#E6EAF0] line-through'
+                }`}
             >
               <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  visibleSeries.gpuMemory ? 'bg-[#10B981]' : 'bg-slate-400'
-                }`}
+                className={`w-1.5 h-1.5 rounded-full ${visibleSeries.gpuMemory ? 'bg-[#0D8A58]' : 'bg-[#CBD2DF]'
+                  }`}
               />
               <span>GPU Memory (GB)</span>
             </button>
           </div>
         </div>
 
-        {/* ECharts Canvas or Status View */}
         {renderChartContent()}
       </div>
 
-      {/* Expanded Modal when user clicks Maximize */}
+      {/* Expanded Chart Modal */}
       {isExpanded && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
-          <div className="w-full max-w-4xl h-[70vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col p-6 overflow-hidden">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 bg-[#222938]/40 backdrop-blur-xs flex items-center justify-center p-6">
+          <div className="w-full max-w-4xl h-[70vh] bg-white rounded-lg shadow-glass border border-[#D9DEE7] flex flex-col p-5 overflow-hidden">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E6EAF0]">
               <div>
-                <h2 className="text-lg font-bold text-[#18213B]">Performance Trends Analysis</h2>
-                <p className="text-xs text-slate-500">
+                <h2 className="text-[16px] font-semibold text-[#222938]">
+                  Performance Trends Analysis
+                </h2>
+                <p className="text-[12px] text-[#647187]">
                   Telemetry across {trendData.points.length} consecutive optimization runs ({activeTimeRange})
                 </p>
               </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setIsExpanded(false)}
-                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+              <button
+                type="button"
+                aria-label="Close Expanded Chart"
+                onClick={() => setIsExpanded(false)}
+                className="h-7 w-7 rounded-sm flex items-center justify-center text-[#647187] hover:text-[#222938] hover:bg-[#F8F9FB] transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
             <div className="flex-1 py-4 min-h-0">
@@ -488,14 +488,11 @@ export const PerformanceTrendsChart: React.FC<PerformanceTrendsChartProps> = ({
               )}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <div className="pt-3 border-t border-[#E6EAF0] flex items-center justify-between text-[12px] text-[#647187]">
               <span className="font-mono">Provenance: {trendData.provenance}</span>
-              <button
-                onClick={() => setIsExpanded(false)}
-                className="px-4 py-1.5 rounded-lg bg-[#7C6AF2] text-white font-medium hover:bg-[#6854E8] transition-colors"
-              >
-                Close View
-              </button>
+              <Button variant="secondary" size="sm" onClick={() => setIsExpanded(false)}>
+                Close
+              </Button>
             </div>
           </div>
         </div>

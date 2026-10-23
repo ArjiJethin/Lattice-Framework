@@ -13,13 +13,16 @@ interface ModelLabPageProps {
   backendState: BackendConnectionState;
   onRefreshConnection: () => void;
   onNavigate?: (key: NavItemKey) => void;
+  modelLibrary?: ReturnType<typeof useModelLibrary>;
 }
 
 export const ModelLabPage: React.FC<ModelLabPageProps> = ({
   backendState,
   onRefreshConnection,
   onNavigate,
+  modelLibrary: externalModelLibrary,
 }) => {
+  const localModelLibrary = useModelLibrary();
   const {
     models,
     selectedModel,
@@ -34,7 +37,7 @@ export const ModelLabPage: React.FC<ModelLabPageProps> = ({
     setIsCompareOpen,
     animationState,
     runBenchmark,
-  } = useModelLibrary();
+  } = externalModelLibrary || localModelLibrary;
 
   const handleUseInOptimizationLab = () => {
     if (onNavigate) {
@@ -49,7 +52,7 @@ export const ModelLabPage: React.FC<ModelLabPageProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col justify-between p-3 select-none overflow-hidden gap-2">
+    <div className="h-full flex flex-col justify-between p-3 select-none overflow-hidden gap-2.5">
       {/* Top Header */}
       <ModelLibraryHeader
         stats={summaryStats}
@@ -59,10 +62,10 @@ export const ModelLabPage: React.FC<ModelLabPageProps> = ({
       />
 
       {/* Main 3-Column Content Workspace */}
-      <div className="px-5 flex-1 min-h-0 flex flex-col gap-2">
+      <div className="px-5 flex-1 min-h-0 flex flex-col gap-2.5">
         <div className="flex-1 min-h-0 grid grid-cols-12 gap-3 items-stretch">
           {/* Left Column: Model Catalog List (col-span-3) */}
-          <div className="col-span-3 h-full min-h-0 flex flex-col rounded-2xl bg-white/80 backdrop-blur-xl border border-white/90 p-3 shadow-2xs">
+          <div className="col-span-3 h-full min-h-0 flex flex-col rounded-lg bg-white border border-[#D9DEE7] p-3 shadow-2xs">
             <ModelFamilyList
               models={models}
               selectedModelId={selectedModel.id}
@@ -91,7 +94,7 @@ export const ModelLabPage: React.FC<ModelLabPageProps> = ({
         </div>
 
         {/* Bottom Section: Quantization Variants Strip */}
-        <div className="w-full shrink-0 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/90 px-4 py-2 shadow-2xs">
+        <div className="w-full shrink-0 rounded-lg bg-white border border-[#D9DEE7] px-4 py-2.5 shadow-2xs">
           <QuantizationVariantStrip
             model={selectedModel}
             selectedVariantId={selectedVariant.id}

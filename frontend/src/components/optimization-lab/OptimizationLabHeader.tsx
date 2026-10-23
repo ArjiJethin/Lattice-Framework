@@ -4,8 +4,6 @@ import {
   Database,
   BarChart2,
   FlaskConical,
-  Sparkles,
-  Settings,
   Minus,
   Square,
   X,
@@ -30,144 +28,117 @@ export const OptimizationLabHeader: React.FC<OptimizationLabHeaderProps> = ({
   onBackToModelLab,
 }) => {
   return (
-    <header className="flex flex-col gap-2.5 pb-2 border-b border-slate-200/80">
-      {/* Top Utility Row */}
+    <header className="flex flex-col gap-2 pb-2.5 border-b border-[#D9DEE7]">
       <div className="flex items-center justify-between">
-        {/* Breadcrumb Navigation */}
-        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+        <div className="flex items-center gap-1.5 text-[12px] font-medium text-[#647187]">
           <button
+            type="button"
             onClick={onBackToOverview || onBackToModelLab}
-            className="flex items-center gap-1 hover:text-[#7C6AF2] transition-colors"
+            className="flex items-center gap-1 hover:text-[#222938] transition-colors cursor-pointer"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
-            <span>Optimization Lab</span>
+            <span className="font-semibold text-[#222938]">Optimization Lab</span>
           </button>
         </div>
 
-        {/* Right Status Badges & Window Controls */}
         <div className="flex items-center gap-2">
-          {/* Connection Mode Pill */}
           <button
+            type="button"
             onClick={onRefreshConnection}
             title={
               backendState.connected
                 ? `Connected to ${backendState.endpoint}`
-                : `Demo Mode: Backend offline at ${backendState.endpoint} (Click to re-check)`
+                : `Demo Mode: Backend offline at ${backendState.endpoint}`
             }
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold border backdrop-blur-md transition-all ${
-              backendState.connected
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100/80 shadow-2xs'
-                : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100/80 shadow-2xs'
-            }`}
+            className={`flex items-center gap-2 h-7 px-2.5 rounded-md border text-[11.5px] font-medium transition-colors cursor-pointer ${backendState.connected
+                ? 'bg-[#ECFDF5] border-[#A7F3D0] text-[#0D8A58] hover:bg-[#D1FAE5]'
+                : 'bg-[#FFFBEB] border-[#FDE68A] text-[#B45309] hover:bg-[#FEF3C7]'
+              }`}
           >
             <span
-              className={`w-2 h-2 rounded-full ${
-                backendState.connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-              }`}
+              className={`w-1.5 h-1.5 rounded-full ${backendState.connected ? 'bg-[#0D8A58]' : 'bg-[#D97706]'
+                }`}
             />
-            <span>{backendState.connected ? 'Live Backend' : 'Demo Mode'}</span>
-            <span className="text-[10px] opacity-75 font-mono">{backendState.endpoint}</span>
+            <span className="font-semibold">
+              {backendState.connected ? 'Live Backend' : 'Demo Mode'}
+            </span>
+            <span className="font-mono text-[11px] opacity-85">{backendState.endpoint}</span>
           </button>
 
-          {/* Quick Action Icons */}
-          <button
-            title="AI Optimization Insights"
-            className="p-1.5 rounded-lg text-slate-500 hover:text-[#7C6AF2] hover:bg-slate-100 transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-          </button>
-          <button
-            title="Settings"
-            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-          >
-            <Settings className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Window Chrome Controls Decoration */}
-          <div className="flex items-center gap-1 pl-2 border-l border-slate-200/80 text-slate-400">
-            <button className="p-1 hover:bg-slate-100 hover:text-slate-700 rounded transition-colors">
+          <div className="flex items-center gap-0.5 ml-1 pl-1.5 border-l border-[#D9DEE7]">
+            <button
+              type="button"
+              aria-label="Minimize Window"
+              className="h-7 w-7 rounded-sm flex items-center justify-center text-[#647187] hover:text-[#222938] hover:bg-[#F8F9FB] transition-colors"
+            >
               <Minus className="w-3 h-3" />
             </button>
-            <button className="p-1 hover:bg-slate-100 hover:text-slate-700 rounded transition-colors">
+            <button
+              type="button"
+              aria-label="Maximize Window"
+              className="h-7 w-7 rounded-sm flex items-center justify-center text-[#647187] hover:text-[#222938] hover:bg-[#F8F9FB] transition-colors"
+            >
               <Square className="w-2.5 h-2.5" />
             </button>
-            <button className="p-1 hover:bg-red-50 hover:text-red-500 rounded transition-colors">
+            <button
+              type="button"
+              aria-label="Close Window"
+              className="h-7 w-7 rounded-sm flex items-center justify-center text-[#647187] hover:text-[#DC2626] hover:bg-red-50 transition-colors"
+            >
               <X className="w-3 h-3" />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Main Title & Aggregate Metric Badges Row */}
-      <div className="flex items-end justify-between flex-wrap gap-3">
+      <div className="flex items-end justify-between flex-wrap gap-3 pt-0.5">
         <div>
-          <h1 className="text-2xl font-black text-[#18213B] tracking-tight leading-none">
+          <h1 className="text-[22px] font-semibold text-[#222938] tracking-tight leading-none">
             Optimization Lab
           </h1>
-          <p className="text-xs text-slate-500 font-medium mt-1">
+          <p className="text-[12.5px] text-[#647187] font-normal mt-1">
             Find the best configuration for your workload using real constraints and measured profiles.
           </p>
         </div>
 
-        {/* 4 Summary Stat Pills matching the reference screenshot */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Installed Models */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs">
-            <div className="w-6 h-6 rounded-lg bg-purple-50 text-[#8B5CF6] flex items-center justify-center">
-              <Download className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <span className="text-xs font-extrabold text-[#18213B] leading-none block">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2.5 px-3 py-1 rounded-md bg-white border border-[#D9DEE7] shadow-2xs">
+            <Download className="w-3.5 h-3.5 text-[#7562E8]" />
+            <div className="flex items-baseline gap-1.5 leading-none">
+              <span className="text-[13px] font-bold font-mono text-[#222938] tabular-nums">
                 {stats.installed}
               </span>
-              <span className="text-[10px] text-slate-500 font-medium leading-none block mt-0.5">
-                Installed
-              </span>
+              <span className="text-[11px] text-[#647187] font-medium">Installed</span>
             </div>
           </div>
 
-          {/* Total Models */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs">
-            <div className="w-6 h-6 rounded-lg bg-blue-50 text-[#3B82F6] flex items-center justify-center">
-              <Database className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <span className="text-xs font-extrabold text-[#18213B] leading-none block">
+          <div className="flex items-center gap-2.5 px-3 py-1 rounded-md bg-white border border-[#D9DEE7] shadow-2xs">
+            <Database className="w-3.5 h-3.5 text-[#2563EB]" />
+            <div className="flex items-baseline gap-1.5 leading-none">
+              <span className="text-[13px] font-bold font-mono text-[#222938] tabular-nums">
                 {stats.totalModels}
               </span>
-              <span className="text-[10px] text-slate-500 font-medium leading-none block mt-0.5">
-                Total Models
-              </span>
+              <span className="text-[11px] text-[#647187] font-medium">Total</span>
             </div>
           </div>
 
-          {/* Profiled */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs">
-            <div className="w-6 h-6 rounded-lg bg-emerald-50 text-[#10B981] flex items-center justify-center">
-              <BarChart2 className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <span className="text-xs font-extrabold text-[#18213B] leading-none block">
+          <div className="flex items-center gap-2.5 px-3 py-1 rounded-md bg-white border border-[#D9DEE7] shadow-2xs">
+            <BarChart2 className="w-3.5 h-3.5 text-[#0D8A58]" />
+            <div className="flex items-baseline gap-1.5 leading-none">
+              <span className="text-[13px] font-bold font-mono text-[#222938] tabular-nums">
                 {stats.profiled}
               </span>
-              <span className="text-[10px] text-slate-500 font-medium leading-none block mt-0.5">
-                Profiled
-              </span>
+              <span className="text-[11px] text-[#647187] font-medium">Profiled</span>
             </div>
           </div>
 
-          {/* Ready to Test */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs">
-            <div className="w-6 h-6 rounded-lg bg-indigo-50 text-[#6366F1] flex items-center justify-center">
-              <FlaskConical className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <span className="text-xs font-extrabold text-[#18213B] leading-none block">
+          <div className="flex items-center gap-2.5 px-3 py-1 rounded-md bg-white border border-[#D9DEE7] shadow-2xs">
+            <FlaskConical className="w-3.5 h-3.5 text-[#7562E8]" />
+            <div className="flex items-baseline gap-1.5 leading-none">
+              <span className="text-[13px] font-bold font-mono text-[#222938] tabular-nums">
                 {stats.readyToTest}
               </span>
-              <span className="text-[10px] text-slate-500 font-medium leading-none block mt-0.5">
-                Ready to Test
-              </span>
+              <span className="text-[11px] text-[#647187] font-medium">Ready</span>
             </div>
           </div>
         </div>

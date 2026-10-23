@@ -13,7 +13,7 @@ import { useModelLibrary } from './hooks/useModelLibrary';
 import { ConfigurationCandidate } from './types';
 
 export default function App(): React.ReactElement {
-  const [activeNav, setActiveNav] = useState<NavItemKey>('settings');
+  const [activeNav, setActiveNav] = useState<NavItemKey>('overview');
   const [inspectingCandidate, setInspectingCandidate] = useState<ConfigurationCandidate | null>(null);
   const overviewData = useOverviewData();
   const modelLibrary = useModelLibrary();
@@ -40,7 +40,7 @@ export default function App(): React.ReactElement {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden lattice-window-bg text-[#18213B] font-sans">
+    <div className="flex h-screen w-screen overflow-hidden lattice-window-bg text-[#222938] font-sans">
       {/* Persistent Left Sidebar */}
       <Sidebar
         activeNav={activeNav}
@@ -49,8 +49,11 @@ export default function App(): React.ReactElement {
         backendState={overviewData.backendState}
       />
 
-      {/* Main Content Workspace Area - Viewport fitted for Model Lab, scrollable for Overview, Optimization Lab & Experiments */}
-      <div className={`flex-1 h-screen min-w-0 ${activeNav === 'model-lab' ? 'overflow-hidden' : 'overflow-y-auto'} overflow-x-hidden relative flex flex-col scroll-smooth`}>
+      {/* Main Content Workspace Area */}
+      <div
+        className={`flex-1 h-screen min-w-0 ${activeNav === 'model-lab' ? 'overflow-hidden' : 'overflow-y-auto'
+          } overflow-x-hidden relative flex flex-col scroll-smooth`}
+      >
         {activeNav === 'overview' ? (
           <OverviewPage
             data={overviewData}

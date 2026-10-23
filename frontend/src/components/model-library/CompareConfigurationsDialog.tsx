@@ -1,5 +1,6 @@
 import React from 'react';
 import { QuantizationVariant, ModelFamily } from '../../types/modelLibrary';
+import { Button, StatusBadge } from '../ui/primitives';
 import { X, Zap, Gauge, Cpu, BarChart2 } from 'lucide-react';
 
 interface CompareConfigurationsDialogProps {
@@ -16,124 +17,121 @@ export const CompareConfigurationsDialog: React.FC<CompareConfigurationsDialogPr
   onSelectForInspection,
 }) => {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm select-none">
-      <div className="relative w-full max-w-4xl p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-white/90 shadow-[0_16px_48px_rgba(24,33,59,0.14)] max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#222938]/40 backdrop-blur-xs select-none">
+      <div className="relative w-full max-w-4xl p-5 rounded-lg bg-white border border-[#D9DEE7] shadow-glass max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-200/80 mb-5">
+        <div className="flex items-center justify-between pb-3.5 border-b border-[#E6EAF0] mb-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full bg-[#EEEBFF] text-[#8174F5] text-[10.5px] font-bold">
+              <StatusBadge tone="accent" dot={false}>
                 Comparison Mode
-              </span>
-              <h2 className="text-[18px] font-extrabold text-[#18213B] tracking-tight">
+              </StatusBadge>
+              <h2 className="text-[16px] font-semibold text-[#222938] tracking-tight">
                 Compare Quantization Variants — {model.name}
               </h2>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Evaluating trade-offs between precision, inference latency, memory pressure and throughput.
+            <p className="text-[12px] text-[#647187] mt-1">
+              Evaluating trade-offs between precision, inference latency, memory footprint and throughput.
             </p>
           </div>
 
           <button
+            type="button"
+            aria-label="Close Comparison Modal"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-[#18213B] hover:bg-slate-100 transition-colors"
+            className="h-7 w-7 rounded-sm flex items-center justify-center text-[#647187] hover:text-[#222938] hover:bg-[#F8F9FB] transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Side-by-Side Comparison Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {variants.map((v) => (
             <div
               key={v.id}
-              className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-sm flex flex-col justify-between"
+              className="p-4 rounded-md bg-[#F8F9FB] border border-[#D9DEE7] flex flex-col justify-between"
             >
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[16px] font-extrabold text-[#18213B]">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[15px] font-mono font-semibold text-[#222938]">
                     {v.name}
                   </span>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${v.isProfiled
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
-                        : 'bg-slate-100 text-slate-500'
-                      }`}
+                  <StatusBadge
+                    tone={v.isProfiled ? 'success' : 'neutral'}
+                    dot={v.isProfiled}
                   >
                     {v.isProfiled ? 'Profiled' : 'Not Profiled'}
-                  </span>
+                  </StatusBadge>
                 </div>
 
-                <div className="text-[11px] font-medium text-[#8174F5] mb-3">
+                <div className="text-[11.5px] font-medium text-[#7562E8] mb-3">
                   {v.descriptionTag}
                 </div>
 
-                {/* Metrics Table */}
-                <div className="space-y-2 text-xs pt-1 border-t border-slate-100">
-                  <div className="flex items-center justify-between py-1 border-b border-slate-50">
-                    <span className="flex items-center gap-1.5 text-slate-500">
-                      <Cpu className="w-3.5 h-3.5 text-[#6366F1]" />
+                <div className="divide-y divide-[#E6EAF0] text-[12px] border-t border-b border-[#E6EAF0]">
+                  <div className="flex items-center justify-between py-2">
+                    <span className="flex items-center gap-1.5 text-[#647187]">
+                      <Cpu className="w-3.5 h-3.5 text-[#7562E8]" />
                       <span>VRAM Size</span>
                     </span>
-                    <span className="font-bold text-[#18213B]">
-                      {v.memoryUsageGb ? `${v.memoryUsageGb} GB` : 'N/A'}
+                    <span className="font-mono font-semibold text-[#222938] tabular-nums">
+                      {v.memoryUsageGb ? `${v.memoryUsageGb} GB` : '—'}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between py-1 border-b border-slate-50">
-                    <span className="flex items-center gap-1.5 text-slate-500">
-                      <Zap className="w-3.5 h-3.5 text-[#3B82F6]" />
+                  <div className="flex items-center justify-between py-2">
+                    <span className="flex items-center gap-1.5 text-[#647187]">
+                      <Zap className="w-3.5 h-3.5 text-[#2563EB]" />
                       <span>Latency (TTFT)</span>
                     </span>
-                    <span className="font-bold text-[#18213B]">
-                      {v.inferenceLatencyMs ? `${v.inferenceLatencyMs} ms` : 'N/A'}
+                    <span className="font-mono font-semibold text-[#222938] tabular-nums">
+                      {v.inferenceLatencyMs ? `${v.inferenceLatencyMs} ms` : '—'}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between py-1 border-b border-slate-50">
-                    <span className="flex items-center gap-1.5 text-slate-500">
-                      <Gauge className="w-3.5 h-3.5 text-[#8174F5]" />
+                  <div className="flex items-center justify-between py-2">
+                    <span className="flex items-center gap-1.5 text-[#647187]">
+                      <Gauge className="w-3.5 h-3.5 text-[#7562E8]" />
                       <span>Throughput</span>
                     </span>
-                    <span className="font-bold text-[#18213B]">
-                      {v.generationSpeedToks ? `${v.generationSpeedToks} tok/s` : 'N/A'}
+                    <span className="font-mono font-semibold text-[#222938] tabular-nums">
+                      {v.generationSpeedToks ? `${v.generationSpeedToks} tok/s` : '—'}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between py-1">
-                    <span className="flex items-center gap-1.5 text-slate-500">
-                      <BarChart2 className="w-3.5 h-3.5 text-[#14B8A6]" />
+                  <div className="flex items-center justify-between py-2">
+                    <span className="flex items-center gap-1.5 text-[#647187]">
+                      <BarChart2 className="w-3.5 h-3.5 text-[#0D8A58]" />
                       <span>Quality Score</span>
                     </span>
-                    <span className="font-bold text-[#18213B]">
+                    <span className="font-mono font-semibold text-[#222938] tabular-nums">
                       {v.qualityScore ? `${v.qualityScore.toFixed(1)} / 100` : 'Pending'}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Action Button */}
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   onSelectForInspection(v);
                   onClose();
                 }}
-                className="mt-4 w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-[#8174F5] hover:text-white text-[#18213B] text-xs font-semibold transition-all text-center"
+                className="mt-3.5 w-full"
               >
                 Inspect in 3D Stage
-              </button>
+              </Button>
             </div>
           ))}
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end pt-5 border-t border-slate-200/80 mt-5">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-[#18213B] text-white text-xs font-semibold hover:bg-slate-800 transition-colors"
-          >
+        <div className="flex justify-end pt-4 border-t border-[#E6EAF0] mt-4">
+          <Button variant="primary" size="sm" onClick={onClose}>
             Done
-          </button>
+          </Button>
         </div>
       </div>
     </div>

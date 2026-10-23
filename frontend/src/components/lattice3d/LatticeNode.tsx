@@ -16,28 +16,25 @@ const UNIT_CYLINDER = new THREE.CylinderGeometry(1, 1, 1, 8);
 const UNIT_SPHERE = new THREE.SphereGeometry(1, 10, 10);
 const UNIT_PLANE = new THREE.PlaneGeometry(1, 1);
 
-// Precompute the 12 face-diagonals + 4 space-diagonals of a unit cube so every crystal face
-// has the exact X-faceted geometric wireframe seen in the reference image.
 const CUBE_FACE_DIAGONALS_GEO = (() => {
   const h = 0.5;
   const c = [
-    new THREE.Vector3(-h, -h, -h), // 0
-    new THREE.Vector3(h, -h, -h),  // 1
-    new THREE.Vector3(h, h, -h),   // 2
-    new THREE.Vector3(-h, h, -h),  // 3
-    new THREE.Vector3(-h, -h, h),  // 4
-    new THREE.Vector3(h, -h, h),   // 5
-    new THREE.Vector3(h, h, h),    // 6
-    new THREE.Vector3(-h, h, h),   // 7
+    new THREE.Vector3(-h, -h, -h),
+    new THREE.Vector3(h, -h, -h),
+    new THREE.Vector3(h, h, -h),
+    new THREE.Vector3(-h, h, -h),
+    new THREE.Vector3(-h, -h, h),
+    new THREE.Vector3(h, -h, h),
+    new THREE.Vector3(h, h, h),
+    new THREE.Vector3(-h, h, h),
   ];
   const pairs = [
-    // 6 Faces * 2 diagonals = 12 face diagonals
-    [0, 2], [1, 3], // Back
-    [4, 6], [5, 7], // Front
-    [0, 7], [3, 4], // Left
-    [1, 6], [2, 5], // Right
-    [3, 6], [2, 7], // Top
-    [0, 5], [1, 4], // Bottom
+    [0, 2], [1, 3],
+    [4, 6], [5, 7],
+    [0, 7], [3, 4],
+    [1, 6], [2, 5],
+    [3, 6], [2, 7],
+    [0, 5], [1, 4],
   ];
   const pts: THREE.Vector3[] = [];
   pairs.forEach(([a, b]) => {
@@ -54,7 +51,6 @@ const DIAGONAL_QUATERNIONS = [
 ].map((d) => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d));
 
 const VERTEX_OFFSETS: Array<[number, number, number]> = [
-  // 8 Cube Corners
   [-0.48, -0.48, -0.48],
   [0.48, -0.48, -0.48],
   [-0.48, 0.48, -0.48],
@@ -63,7 +59,6 @@ const VERTEX_OFFSETS: Array<[number, number, number]> = [
   [0.48, -0.48, 0.48],
   [-0.48, 0.48, 0.48],
   [0.48, 0.48, 0.48],
-  // 6 Face Centers
   [0.49, 0, 0],
   [-0.49, 0, 0],
   [0, 0.49, 0],
@@ -72,9 +67,6 @@ const VERTEX_OFFSETS: Array<[number, number, number]> = [
   [0, 0, -0.49],
 ];
 
-/**
- * Internal 3D Space-Diagonal Lattice + Glowing Vertex Nodes
- */
 const InternalLatticeStructure: React.FC<{
   size: number;
   glowColor: string;
@@ -84,7 +76,6 @@ const InternalLatticeStructure: React.FC<{
 
   return (
     <group>
-      {/* 4 Corner-to-Corner Space Diagonals */}
       {DIAGONAL_QUATERNIONS.map((q, i) => (
         <group key={i} quaternion={q}>
           <mesh geometry={UNIT_CYLINDER} scale={[r, diagLen, r]}>
@@ -108,7 +99,6 @@ const InternalLatticeStructure: React.FC<{
         </group>
       ))}
 
-      {/* 3 Central X/Y/Z Axis Spindles */}
       <mesh geometry={UNIT_CYLINDER} scale={[r, size * 0.96, r]}>
         <meshBasicMaterial color="#FFFFFF" transparent opacity={0.85} blending={THREE.AdditiveBlending} depthWrite={false} />
       </mesh>
@@ -119,7 +109,6 @@ const InternalLatticeStructure: React.FC<{
         <meshBasicMaterial color="#FFFFFF" transparent opacity={0.85} blending={THREE.AdditiveBlending} depthWrite={false} />
       </mesh>
 
-      {/* Glowing White Vertex Nodes at Cube Corners & Face Centers */}
       {VERTEX_OFFSETS.map(([vx, vy, vz], idx) => (
         <mesh
           key={idx}
@@ -140,9 +129,6 @@ const InternalLatticeStructure: React.FC<{
   );
 });
 
-/**
- * Multi-stepped Brushed Metal & Glass Socket Pedestal matching the reference image
- */
 const PedestalSocket: React.FC<{
   size: number;
   glowColor: string;
@@ -154,7 +140,6 @@ const PedestalSocket: React.FC<{
 
   return (
     <group position={[0, -size / 2, 0]}>
-      {/* Upper Recessed Dark-Chrome Socket Lip */}
       <mesh
         geometry={UNIT_BOX}
         scale={[midCollar, 0.08, midCollar]}
@@ -166,7 +151,6 @@ const PedestalSocket: React.FC<{
         <Edges scale={1} threshold={15} color="#CBD5E1" />
       </mesh>
 
-      {/* Intense Upward Under-Lit Crystal Glow Pad */}
       <mesh
         geometry={UNIT_PLANE}
         scale={[size * 0.98, size * 0.98, 1]}
@@ -194,7 +178,6 @@ const PedestalSocket: React.FC<{
         />
       </mesh>
 
-      {/* Lower Brushed-Aluminum Plinth Base */}
       <mesh
         geometry={UNIT_BOX}
         scale={[outerPlate, 0.11, outerPlate]}
@@ -206,7 +189,6 @@ const PedestalSocket: React.FC<{
         <Edges scale={1} threshold={15} color="#F1F5F9" />
       </mesh>
 
-      {/* 4 Machined Chrome Corner Retention Pins with Glowing Tips */}
       {[
         [-pinOffset, -pinOffset],
         [pinOffset, -pinOffset],
@@ -238,7 +220,6 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
   const isOptimizer = candidate.nodeRole === 'optimizer';
   const size = isOptimizer ? 1.56 : 0.95;
 
-  // Match the exact translucent crystal palette of the reference image
   const palette = useMemo(() => {
     const nameLower = (candidate.name || '').toLowerCase();
     const idLower = (candidate.id || '').toLowerCase();
@@ -253,7 +234,6 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
         shellOpacity: 0.26,
       };
     }
-    // Candidate B: Clear Silver-Diamond Glass
     if (idLower.includes('cand-b') || nameLower.includes('candidate b')) {
       return {
         shellTint: '#F1F5F9',
@@ -264,7 +244,6 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
         shellOpacity: 0.22,
       };
     }
-    // Candidate C & Evaluation Engine: Emerald/Aqua Mint Glass
     if (
       idLower.includes('cand-c') ||
       nameLower.includes('candidate c') ||
@@ -279,7 +258,6 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
         shellOpacity: 0.24,
       };
     }
-    // Candidate A & Model Runtime: Sapphire/Ice-Blue Glass
     return {
       shellTint: '#BAE6FD',
       innerOcta: '#2563EB',
@@ -290,7 +268,6 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
     };
   }, [candidate.id, candidate.name, isOptimizer]);
 
-  // Non-overlapping radial callout positions matching the reference image
   const labelPlacement = useMemo(() => {
     const nameLower = (candidate.name || '').toLowerCase();
     if (isOptimizer || nameLower.includes('optimizer')) {
@@ -326,10 +303,8 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
 
   return (
     <group position={candidate.position3D}>
-      {/* Multi-Stepped Metallic Socket Base */}
       <PedestalSocket size={size} glowColor={palette.glow} isOptimizer={isOptimizer} />
 
-      {/* Faceted Crystalline Cube Assembly */}
       <group
         ref={crystalGroupRef}
         scale={isHovered ? 1.05 : 1.0}
@@ -347,7 +322,6 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
           document.body.style.cursor = 'default';
         }}
       >
-        {/* 1. Outer Refractive Glass Cube */}
         <mesh geometry={UNIT_BOX} scale={[size, size, size]}>
           <meshPhysicalMaterial
             color={palette.shellTint}
@@ -361,11 +335,9 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
             depthWrite={false}
             side={THREE.DoubleSide}
           />
-          {/* Crisp Outer Cube Edges */}
           <Edges scale={1.001} threshold={15} color={palette.edge} />
         </mesh>
 
-        {/* 2. Etched X-Diagonals Across All 6 Outer Cube Faces (Signature Reference Detail) */}
         <lineSegments
           geometry={CUBE_FACE_DIAGONALS_GEO}
           scale={[size * 1.002, size * 1.002, size * 1.002]}
@@ -378,8 +350,6 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
           />
         </lineSegments>
 
-        {/* 3. Inscribed Inner Octahedron / Cuboctahedron Faceted Glass Chamber */}
-        {/* Scaled to size * 0.707 (1/sqrt(2)) so its 6 vertices touch the exact centers of the cube faces */}
         <mesh geometry={UNIT_OCTA} scale={size * 0.7}>
           <meshPhysicalMaterial
             color={palette.innerOcta}
@@ -394,7 +364,6 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
           <Edges scale={1.0} threshold={10} color="#FFFFFF" />
         </mesh>
 
-        {/* 4. Secondary Inner Faceted Prism (Rotated 45 deg for multi-layered refraction look) */}
         <mesh geometry={UNIT_OCTA} scale={size * 0.52} rotation={[0, Math.PI / 4, 0]}>
           <meshBasicMaterial
             color={palette.glow}
@@ -406,10 +375,8 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
           <Edges scale={1.0} threshold={10} color={palette.faceDiag} />
         </mesh>
 
-        {/* 5. Internal Space-Diagonal Struts & Glowing Vertex Dots */}
         <InternalLatticeStructure size={size} glowColor={palette.glow} />
 
-        {/* 6. Rotating Central Radiant Diamond Core */}
         <group ref={innerCoreRef}>
           <mesh geometry={UNIT_OCTA} scale={size * 0.24}>
             <meshBasicMaterial
@@ -431,7 +398,7 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
         </group>
       </group>
 
-      {/* Architectural Callout Badge with Subtle Pin */}
+      {/* Restrained Engineering Callout Tag */}
       {(candidate.subLabel || isSelected || isHovered || isOptimizer) && (
         <Html
           position={labelPlacement}
@@ -445,18 +412,23 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
               onSelect(candidate.id);
             }}
             style={{ pointerEvents: 'auto' }}
-            className={`cursor-pointer whitespace-nowrap px-3 py-1.5 rounded-xl border text-left transition-all duration-150 select-none backdrop-blur-md ${isSelected || isOptimizer
-                ? 'bg-white/95 border-[#8174F5]/40 shadow-[0_6px_20px_rgba(129,116,245,0.18)]'
+            className={`cursor-pointer whitespace-nowrap px-2.5 py-1 rounded-md border text-left transition-colors duration-150 select-none backdrop-blur-md ${isSelected
+                ? 'bg-white/95 border-[#7562E8] shadow-sm'
                 : isHovered
-                  ? 'bg-white/95 border-slate-300 shadow-md scale-105'
-                  : 'bg-white/90 border-white shadow-[0_4px_14px_rgba(15,23,42,0.07)]'
+                  ? 'bg-white/95 border-[#647187] shadow-2xs'
+                  : 'bg-white/90 border-[#D9DEE7] shadow-2xs'
               }`}
           >
-            <div className="text-[11.5px] font-bold text-[#18213B] leading-tight">
-              {candidate.name}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11.5px] font-semibold text-[#222938] leading-tight">
+                {candidate.name}
+              </span>
+              {isSelected && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[#7562E8]" />
+              )}
             </div>
             {candidate.subLabel && (
-              <div className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">
+              <div className="text-[10px] font-mono text-[#647187] leading-tight mt-0.5">
                 {candidate.subLabel}
               </div>
             )}

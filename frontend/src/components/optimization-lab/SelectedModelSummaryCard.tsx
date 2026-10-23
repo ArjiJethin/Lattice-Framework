@@ -1,116 +1,119 @@
+import React from 'react';
 import { ArrowLeftRight, Box, CheckCircle2 } from 'lucide-react';
 import { ModelFamily, QuantizationVariant } from '../../types/modelLibrary';
+import { OptimizationCandidate } from '../../types/optimizationLab';
+import { Button, StatusBadge } from '../ui/primitives';
 
 interface SelectedModelSummaryCardProps {
   model: ModelFamily;
   selectedVariant?: QuantizationVariant;
+  recommendedCandidate?: OptimizationCandidate | null;
   onChangeModel: () => void;
 }
 
 export const SelectedModelSummaryCard: React.FC<SelectedModelSummaryCardProps> = ({
   model,
   selectedVariant,
+  recommendedCandidate,
   onChangeModel,
 }) => {
-  const activeQuantization = selectedVariant?.name || model.defaultVariantId.split('-').pop()?.toUpperCase() || 'Q4_K_M';
+  const activeQuantization =
+    selectedVariant?.name ||
+    model.defaultVariantId.split('-').pop()?.toUpperCase() ||
+    'Q4_K_M';
   const isInstalled = model.status === 'Installed';
+  const profiledCount = model.variants.filter((v) => v.isProfiled).length;
 
   return (
-    <div className="w-full bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-xs p-4 flex items-center justify-between flex-wrap gap-4 transition-all">
-      {/* Left: Model Identity */}
-      <div className="flex items-center gap-3.5 min-w-[280px]">
-        {/* Model Archetype Icon Box */}
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-100 to-indigo-50 border border-purple-200/80 flex items-center justify-center text-[#7C6AF2] shadow-2xs shrink-0">
-          <Box className="w-6 h-6 stroke-[1.8]" />
+    <div className="w-full bg-white rounded-lg border border-[#D9DEE7] shadow-2xs p-4 flex items-center justify-between flex-wrap gap-4">
+      {/* Left: Model Identity & Active Baseline */}
+      <div className="flex items-center gap-3 min-w-[260px]">
+        <div className="w-9 h-9 rounded-md bg-[#F8F9FB] border border-[#D9DEE7] text-[#7562E8] flex items-center justify-center shrink-0">
+          <Box className="w-5 h-5 stroke-[1.8]" />
         </div>
 
         <div>
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            <span>Current Model</span>
-          </div>
-
+          <span className="text-[11px] font-semibold text-[#647187] uppercase tracking-wider block">
+            Target Model Family
+          </span>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <h2 className="text-lg font-black text-[#18213B] tracking-tight leading-tight">
+            <h2 className="text-[16px] font-semibold text-[#222938] tracking-tight leading-tight">
               {model.name}
             </h2>
-            <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#8B5CF6]/10 text-[#7C6AF2] border border-[#8B5CF6]/20">
-              {activeQuantization}
+            <StatusBadge tone={isInstalled ? 'success' : 'neutral'}>
+              {model.status || 'Available'}
+            </StatusBadge>
+            <span className="text-[11px] font-mono text-[#647187] bg-[#F8F9FB] px-1.5 py-0.5 rounded-sm border border-[#E6EAF0] tabular-nums">
+              {profiledCount}/{model.variants.length} Profiled
             </span>
-            {isInstalled ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
-                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                <span>Installed</span>
-              </span>
-            ) : (
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                {model.status || 'Available'}
-              </span>
-            )}
           </div>
-
-          <p className="text-xs text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
-            <span>{model.parameters}</span>
-            <span>·</span>
-            <span>{model.fileFormat}</span>
-            <span>·</span>
-            <span>{model.category || 'General Purpose'}</span>
-          </p>
         </div>
       </div>
 
-      {/* Center: Metadata Grid */}
-      <div className="flex items-center gap-8 flex-wrap py-1 px-2 border-y sm:border-y-0 sm:border-x border-slate-100 sm:px-6">
-        {/* Model Size */}
+      {/* Center: Technical Metadata & Active vs Recommended Distinction */}
+      <div className="flex items-center gap-6 xl:gap-8 flex-wrap py-1 border-y sm:border-y-0 sm:border-x border-[#E6EAF0] sm:px-6">
         <div>
-          <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">
-            Model Size
+          <span className="text-[10.5px] font-semibold text-[#647187] block uppercase tracking-wider">
+            Parameters
           </span>
-          <span className="text-xs font-extrabold text-[#18213B] mt-0.5 block">
-            {model.parameters ? `${model.parameters} parameters` : '—'}
+          <span className="text-[12.5px] font-semibold text-[#222938] mt-0.5 block font-mono tabular-nums">
+            {model.parameters ? `${model.parameters}` : '—'}
           </span>
         </div>
 
-        {/* Architecture */}
         <div>
-          <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">
+          <span className="text-[10.5px] font-semibold text-[#647187] block uppercase tracking-wider">
             Architecture
           </span>
-          <span className="text-xs font-extrabold text-[#18213B] mt-0.5 block">
+          <span className="text-[12.5px] font-semibold text-[#222938] mt-0.5 block">
             {model.architecture || 'Transformer'}
           </span>
         </div>
 
-        {/* Quantization */}
         <div>
-          <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">
-            Quantization
+          <span className="text-[10.5px] font-semibold text-[#647187] block uppercase tracking-wider">
+            Context Window
           </span>
-          <span className="text-xs font-extrabold text-[#18213B] mt-0.5 block">
+          <span className="text-[12.5px] font-semibold font-mono text-[#222938] mt-0.5 block tabular-nums">
+            {model.contextLength || '32K'}
+          </span>
+        </div>
+
+        <div>
+          <span className="text-[10.5px] font-semibold text-[#647187] block uppercase tracking-wider">
+            Active Baseline
+          </span>
+          <span className="text-[12.5px] font-semibold font-mono text-[#222938] mt-0.5 block">
             {activeQuantization}
           </span>
         </div>
 
-        {/* Context Length */}
         <div>
-          <span className="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">
-            Context Length
+          <span className="text-[10.5px] font-semibold text-[#647187] block uppercase tracking-wider">
+            Solver Recommendation
           </span>
-          <span className="text-xs font-extrabold text-[#18213B] mt-0.5 block">
-            {model.contextLength || '32K'}
-          </span>
+          {recommendedCandidate ? (
+            <span className="text-[12.5px] font-semibold font-mono text-[#0D8A58] mt-0.5 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>{recommendedCandidate.quantization}</span>
+            </span>
+          ) : (
+            <span className="text-[12px] font-mono text-[#B45309] mt-0.5 block">
+              None Feasible
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Right: Change Model Button */}
-      <div className="shrink-0">
-        <button
-          onClick={onChangeModel}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-slate-50 active:bg-slate-100 text-[#18213B] text-xs font-bold border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all cursor-pointer group"
-        >
-          <ArrowLeftRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-[#7C6AF2] transition-colors" />
-          <span>Change Model</span>
-        </button>
-      </div>
+      {/* Right: Change Model Action */}
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={onChangeModel}
+        leftIcon={<ArrowLeftRight className="w-3.5 h-3.5 text-[#647187]" />}
+      >
+        Change Model
+      </Button>
     </div>
   );
 };

@@ -4,21 +4,29 @@ import {
   OptimizationCandidate,
   OptimizationConstraints,
 } from '../../types/optimizationLab';
+import { StatusBadge, SegmentedTabs, Button } from '../ui/primitives';
 import {
   CheckCircle2,
+  AlertTriangle,
+  XCircle,
   Box,
   HardDrive,
   Zap,
   Award,
+  ArrowRight,
+  Eye,
 } from 'lucide-react';
 
 interface OptimizationResultsInspectorProps {
   decision: OptimizationDecisionResult | null;
   selectedCandidate: OptimizationCandidate | null;
+  activeVariantName?: string;
   onSelectCandidate: (candidate: OptimizationCandidate) => void;
+  onNavigateToExperiments?: () => void;
   constraints: OptimizationConstraints;
   candidates: OptimizationCandidate[];
   isLoading: boolean;
+  hasUnsolvedChanges?: boolean;
 }
 
 type InspectorTab = 'alternatives' | 'constraints' | 'analysis';
@@ -26,360 +34,484 @@ type InspectorTab = 'alternatives' | 'constraints' | 'analysis';
 export const OptimizationResultsInspector: React.FC<OptimizationResultsInspectorProps> = ({
   decision,
   selectedCandidate,
+  activeVariantName,
   onSelectCandidate,
+  onNavigateToExperiments,
   constraints,
   candidates,
   isLoading,
+  hasUnsolvedChanges = false,
 }) => {
   const [activeTab, setActiveTab] = useState<InspectorTab>('alternatives');
 
-  const recommended = decision?.recommendedCandidate || selectedCandidate;
+  const recommended = decision?.recommendedCandidate || null;
+  const inspected = selectedCandidate || recommended;
   const currentModelCandidates = candidates.filter((c) => c.isCurrentModelVariant);
 
-  return (
-    <div className="w-full bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-xs p-5 transition-all flex flex-col gap-4">
-      {/* 1. Header with Status Badge matching screenshot */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
-        <h2 className="text-base font-extrabold text-[#18213B] tracking-tight">
-          3. Optimization Results
-        </h2>
+  const isInspectingDifferentFromRecommended =
+    Boolean(recommended && inspected && recommended.id !== inspected.id);
 
-        {decision ? (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Optimization Complete</span>
-          </span>
-        ) : isLoading ? (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-[#7C6AF2] border border-purple-200/80">
-            <span className="w-2 h-2 rounded-full bg-[#7C6AF2] animate-ping" />
-            <span>Evaluating...</span>
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-            <span className="w-2 h-2 rounded-full bg-slate-400" />
-            <span>Awaiting Plan</span>
-          </span>
-        )}
+  const renderSolverStatusBadge = () => {
+    if (isLoading) {
+      return (
+        <StatusBadge tone="accent" pulse>
+          Solving...
+        </StatusBadge>
+      );
+    }
+    if (!decision) {
+      return <StatusBadge tone="neutral">Awaiting Plan</StatusBadge>;
+    }
+    if (decision.status === 'optimal') {
+      return <StatusBadge tone="success">Optimal Found</StatusBadge>;
+    }
+    if (decision.status === 'feasible') {
+      return <StatusBadge tone="warning">Near-Feasible Fallback</StatusBadge>;
+    }
+    return <StatusBadge tone="danger">No Feasible Candidate</StatusBadge>;
+  };
+
+  return (
+    <div className="w-full bg-white rounded-lg border border-[#D9DEE7] shadow-2xs p-4 flex flex-col gap-3">
+      {/* Header */}
+      <div className="flex items-center justify-between pb-2.5 border-b border-[#E6EAF0] flex-wrap gap-2">
+        <div>
+          <h2 className="text-[15px] font-semibold text-[#222938] tracking-tight">
+            3. Optimization Decision &amp; Inspector
+          </h2>
+          <p className="text-[11.5px] text-[#647187] mt-0.5">
+            {decision?.isLiveResponse
+              ? 'Live backend solver decision'
+              : 'Deterministic Pareto evaluation'}
+          </p>
+        </div>
+
+        {renderSolverStatusBadge()}
       </div>
 
-      {recommended ? (
-        <>
-          {/* 2. Recommended Configuration Card matching reference */}
-          <div className="rounded-xl border border-purple-200/70 bg-gradient-to-br from-purple-50/40 via-white to-indigo-50/30 p-3.5 flex flex-col gap-3 shadow-2xs">
-            <div className="flex items-start justify-between gap-2">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Recommended Configuration
-              </span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-[#8B5CF6]/15 text-[#7C6AF2] border border-[#8B5CF6]/25 uppercase tracking-wide">
-                LATTICE
+      {/* Infeasible Alert State */}
+      {decision?.status === 'infeasible' && (
+        <div className="p-3 rounded-md bg-[#FEF2F2] border border-[#FECACA] text-[#DC2626] flex items-start gap-2.5">
+          <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div className="text-[12px] leading-relaxed">
+            <span className="font-semibold block text-[#991B1B]">
+              No Strictly Feasible Configuration Found
+            </span>
+            <span className="text-[#DC2626]">{decision.rationale}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Primary Recommendation Card (when a recommendation exists) */}
+      {recommended && (
+        <div
+          className={`rounded-md border p-3.5 flex flex-col gap-2.5 ${decision?.status === 'optimal'
+              ? 'border-[#A7F3D0] bg-[#ECFDF5]/40'
+              : 'border-[#FDE68A] bg-[#FFFBEB]/50'
+            }`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#0D8A58]">
+              {decision?.status === 'optimal'
+                ? 'Recommended Configuration'
+                : 'Closest Near-Feasible Candidate'}
+            </span>
+            <div className="flex items-center gap-1.5">
+              {activeVariantName && activeVariantName === recommended.quantization && (
+                <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono bg-white text-[#647187] border border-[#D9DEE7]">
+                  Matches Active Baseline
+                </span>
+              )}
+              <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold bg-white text-[#7562E8] border border-[#D9DEE7]">
+                {decision?.isLiveResponse ? 'LIVE SOLVER' : 'PARETO SOLVER'}
               </span>
             </div>
+          </div>
 
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-100 border border-purple-200 flex items-center justify-center text-[#7C6AF2] shadow-2xs shrink-0">
-                <Box className="w-5 h-5" />
+          <div className="flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-md bg-white border border-[#D9DEE7] text-[#7562E8] flex items-center justify-center shrink-0">
+                <Box className="w-4 h-4" />
               </div>
 
               <div>
-                <h3 className="text-sm font-extrabold text-[#18213B] leading-tight">
-                  {recommended.modelName}
+                <h3 className="text-[14.5px] font-semibold text-[#222938] leading-tight">
+                  {recommended.modelName} —{' '}
+                  <span className="font-mono text-[#7562E8]">{recommended.quantization}</span>
                 </h3>
-                <p className="text-xs font-bold text-[#7C6AF2] mt-0.5">
-                  {recommended.quantization} &nbsp;·&nbsp;{' '}
-                  <span className="text-slate-500 font-medium">General Purpose</span>
+                <p className="text-[11.5px] text-[#647187] mt-0.5">
+                  {recommended.description} · Objective:{' '}
+                  <span className="font-mono uppercase">{constraints.objective}</span>
                 </p>
               </div>
             </div>
 
-            <p className="text-[11.5px] text-slate-600 font-medium leading-relaxed">
-              {decision?.rationale ||
-                'Best trade-off for the given constraints. Meets all requirements while minimizing latency.'}
-            </p>
-
-            {/* 3 Metrics Row */}
-            <div className="grid grid-cols-3 gap-2 pt-1">
-              {/* Memory */}
-              <div className="p-2 rounded-lg bg-purple-50/70 border border-purple-100/90 text-center">
-                <div className="flex items-center justify-center text-[#8B5CF6] mb-1">
-                  <HardDrive className="w-3.5 h-3.5" />
-                </div>
-                <span className="text-xs font-black text-[#18213B] block">
-                  {recommended.memoryUsageGb !== null ? `${recommended.memoryUsageGb} GB` : '—'}
-                </span>
-                <span className="text-[9.5px] font-medium text-slate-400 block mt-0.5">
-                  Memory
-                </span>
-              </div>
-
-              {/* Latency */}
-              <div className="p-2 rounded-lg bg-blue-50/70 border border-blue-100/90 text-center">
-                <div className="flex items-center justify-center text-[#3B82F6] mb-1">
-                  <Zap className="w-3.5 h-3.5" />
-                </div>
-                <span className="text-xs font-black text-[#18213B] block">
-                  {recommended.inferenceLatencyMs !== null ? `${recommended.inferenceLatencyMs} ms` : '—'}
-                </span>
-                <span className="text-[9.5px] font-medium text-slate-400 block mt-0.5">
-                  Latency
-                </span>
-              </div>
-
-              {/* Quality */}
-              <div className="p-2 rounded-lg bg-emerald-50/70 border border-emerald-100/90 text-center">
-                <div className="flex items-center justify-center text-[#10B981] mb-1">
-                  <Award className="w-3.5 h-3.5" />
-                </div>
-                <span className="text-xs font-black text-[#18213B] block">
-                  {recommended.qualityScore !== null ? recommended.qualityScore : '—'}
-                </span>
-                <span className="text-[9.5px] font-medium text-slate-400 block mt-0.5">
-                  Quality
-                </span>
-              </div>
-            </div>
+            {isInspectingDifferentFromRecommended && (
+              <Button
+                variant="secondary"
+                size="xs"
+                onClick={() => onSelectCandidate(recommended)}
+              >
+                Focus Optimal
+              </Button>
+            )}
           </div>
 
-          {/* 3. "Why This Configuration?" Section */}
-          <div className="flex flex-col gap-2 p-3 rounded-xl bg-slate-50/70 border border-slate-100">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-              Why This Configuration?
+          <p className="text-[11.5px] text-[#222938] leading-relaxed">
+            {decision?.rationale}
+          </p>
+
+          <div className="grid grid-cols-3 gap-2 pt-1.5 border-t border-[#D9DEE7]/60">
+            <div className="p-2 rounded-sm bg-white border border-[#D9DEE7] text-center">
+              <div className="flex items-center justify-center gap-1 text-[#647187] text-[10.5px] mb-0.5">
+                <HardDrive className="w-3 h-3" />
+                <span>Memory</span>
+              </div>
+              <span className="text-[13px] font-mono font-semibold text-[#222938] tabular-nums block">
+                {recommended.memoryUsageGb !== null
+                  ? `${recommended.memoryUsageGb.toFixed(1)} GB`
+                  : '—'}
+              </span>
+            </div>
+
+            <div className="p-2 rounded-sm bg-white border border-[#D9DEE7] text-center">
+              <div className="flex items-center justify-center gap-1 text-[#647187] text-[10.5px] mb-0.5">
+                <Zap className="w-3 h-3" />
+                <span>Latency</span>
+              </div>
+              <span className="text-[13px] font-mono font-semibold text-[#222938] tabular-nums block">
+                {recommended.inferenceLatencyMs !== null
+                  ? `${recommended.inferenceLatencyMs} ms`
+                  : '—'}
+              </span>
+            </div>
+
+            <div className="p-2 rounded-sm bg-white border border-[#D9DEE7] text-center">
+              <div className="flex items-center justify-center gap-1 text-[#647187] text-[10.5px] mb-0.5">
+                <Award className="w-3 h-3" />
+                <span>Quality</span>
+              </div>
+              <span className="text-[13px] font-mono font-semibold text-[#222938] tabular-nums block">
+                {recommended.qualityScore !== null
+                  ? `${recommended.qualityScore.toFixed(1)} / 100`
+                  : '—'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Currently Inspected Candidate Banner (when user clicks a different row/point) */}
+      {inspected && isInspectingDifferentFromRecommended && (
+        <div className="p-3 rounded-md bg-[#F2F0FD] border border-[#7562E8] flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-[#634FDB] uppercase tracking-wider flex items-center gap-1.5">
+              <Eye className="w-3.5 h-3.5" />
+              <span>Currently Inspecting: {inspected.quantization}</span>
             </span>
-
-            <ul className="flex flex-col gap-1.5 text-xs">
-              {(decision?.whyThisConfiguration || [
-                'Lowest latency among all feasible candidates',
-                `Meets memory constraint (≤ ${constraints.maxMemoryGb} GB)`,
-                `Exceeds minimum quality threshold (≥ ${constraints.minQualityScore})`,
-                'On Pareto frontier for latency vs memory',
-                'Stable performance profile',
-              ]).map((point, idx) => (
-                <li key={idx} className="flex items-start gap-2 text-slate-700 font-medium leading-tight">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                  <span>{point}</span>
-                </li>
-              ))}
-            </ul>
+            <StatusBadge
+              tone={
+                inspected.status === 'feasible'
+                  ? 'success'
+                  : inspected.status === 'near_feasible'
+                    ? 'warning'
+                    : inspected.status === 'rejected'
+                      ? 'danger'
+                      : 'neutral'
+              }
+              dot={false}
+            >
+              {inspected.status.replace('_', ' ')}
+            </StatusBadge>
           </div>
-
-          {/* 4. Bottom Tabs: Alternatives | Constraints | Detailed Analysis */}
-          <div className="flex flex-col gap-3">
-            {/* Tab Buttons */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-1 text-xs">
-              <button
-                onClick={() => setActiveTab('alternatives')}
-                className={`py-1.5 font-bold transition-all border-b-2 cursor-pointer ${
-                  activeTab === 'alternatives'
-                    ? 'border-[#7C6AF2] text-[#7C6AF2]'
-                    : 'border-transparent text-slate-400 hover:text-slate-700'
-                }`}
-              >
-                Alternatives ({decision?.alternatives.length || 4})
-              </button>
-
-              <button
-                onClick={() => setActiveTab('constraints')}
-                className={`py-1.5 font-bold transition-all border-b-2 cursor-pointer ${
-                  activeTab === 'constraints'
-                    ? 'border-[#7C6AF2] text-[#7C6AF2]'
-                    : 'border-transparent text-slate-400 hover:text-slate-700'
-                }`}
-              >
-                Constraints
-              </button>
-
-              <button
-                onClick={() => setActiveTab('analysis')}
-                className={`py-1.5 font-bold transition-all border-b-2 cursor-pointer ${
-                  activeTab === 'analysis'
-                    ? 'border-[#7C6AF2] text-[#7C6AF2]'
-                    : 'border-transparent text-slate-400 hover:text-slate-700'
-                }`}
-              >
-                Detailed Analysis
-              </button>
+          {inspected.rejectionReasons.length > 0 ? (
+            <div className="text-[11.5px] text-[#DC2626] flex items-start gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>{inspected.rejectionReasons.join(' · ')}</span>
             </div>
+          ) : (
+            <div className="text-[11.5px] text-[#222938]">
+              Memory: <span className="font-mono">{inspected.memoryUsageGb?.toFixed(1)} GB</span> ·
+              Latency: <span className="font-mono">{inspected.inferenceLatencyMs} ms</span> ·
+              Quality: <span className="font-mono">{inspected.qualityScore?.toFixed(1)}</span>
+            </div>
+          )}
+        </div>
+      )}
 
-            {/* Tab 1: Alternatives matching reference */}
-            {activeTab === 'alternatives' && (
-              <div className="flex flex-col gap-2">
-                {(decision?.alternatives || []).map((alt) => {
-                  const targetCand = currentModelCandidates.find((c) => c.id === alt.candidateId);
+      {/* Decision Rationale Checklist */}
+      <div className="flex flex-col gap-1.5 p-3 rounded-md bg-[#F8F9FB] border border-[#D9DEE7]">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-[#647187]">
+            Decision Rationale
+          </span>
+          {hasUnsolvedChanges && (
+            <span className="text-[10.5px] font-mono text-[#B45309]">
+              Pending re-solve
+            </span>
+          )}
+        </div>
+        <ul className="space-y-1.5 text-[11.5px] text-[#222938]">
+          {(decision?.whyThisConfiguration || []).map((point, idx) => (
+            <li key={idx} className="flex items-start gap-2 leading-snug">
+              {decision?.status === 'infeasible' ? (
+                <AlertTriangle className="w-3.5 h-3.5 text-[#D97706] shrink-0 mt-0.5" />
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#0D8A58] shrink-0 mt-0.5" />
+              )}
+              <span>{point}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Inspector Detail Tabs */}
+      {inspected && (
+        <div className="flex flex-col gap-2.5">
+          <SegmentedTabs
+            fullWidth
+            value={activeTab}
+            onChange={(tab) => setActiveTab(tab)}
+            options={[
+              {
+                id: 'alternatives',
+                label: 'Alternatives',
+                count: decision?.alternatives.length || 0,
+              },
+              { id: 'constraints', label: `Audit (${inspected.quantization})` },
+              { id: 'analysis', label: 'Telemetry' },
+            ]}
+          />
+
+          {activeTab === 'alternatives' && (
+            <div className="flex flex-col gap-1.5 max-h-[220px] overflow-y-auto pr-0.5">
+              {(decision?.alternatives || []).length === 0 ? (
+                <div className="py-4 text-center text-[11.5px] text-[#647187]">
+                  No alternative variants available for this model.
+                </div>
+              ) : (
+                (decision?.alternatives || []).map((alt) => {
+                  const targetCand = currentModelCandidates.find(
+                    (c) => c.id === alt.candidateId
+                  );
                   const isAltSelected = selectedCandidate?.id === alt.candidateId;
+                  const statusTone =
+                    alt.status === 'feasible'
+                      ? 'success'
+                      : alt.status === 'near_feasible'
+                        ? 'warning'
+                        : alt.status === 'rejected'
+                          ? 'danger'
+                          : 'neutral';
 
                   return (
                     <div
                       key={alt.candidateId}
                       onClick={() => targetCand && onSelectCandidate(targetCand)}
-                      className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
-                        isAltSelected
-                          ? 'bg-purple-50/80 border-[#8B5CF6]/40 shadow-2xs'
-                          : 'bg-white hover:bg-slate-50 border-slate-200/80'
-                      }`}
+                      className={`flex items-center justify-between p-2.5 rounded-md border transition-colors cursor-pointer ${isAltSelected
+                          ? 'bg-[#F2F0FD] border-[#7562E8]'
+                          : 'bg-white hover:bg-[#F8F9FB] border-[#D9DEE7]'
+                        }`}
                     >
-                      <div className="flex items-center gap-2 min-w-0 pr-2">
-                        <span
-                          className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                            alt.status === 'feasible'
-                              ? 'bg-emerald-500'
-                              : alt.status === 'near_feasible'
-                              ? 'bg-amber-500'
-                              : 'bg-red-500'
-                          }`}
-                        />
+                      <div className="flex items-start gap-2.5 min-w-0 pr-2">
+                        <StatusBadge tone={statusTone} dot={false} className="mt-0.5">
+                          {alt.quantization}
+                        </StatusBadge>
                         <div className="min-w-0">
-                          <span className="text-xs font-bold text-[#18213B] block leading-tight">
-                            {alt.quantization}
-                          </span>
-                          <span className="text-[10.5px] text-slate-500 font-medium truncate block mt-0.5" title={alt.reasonNotPreferred}>
+                          <div className="text-[11px] font-mono text-[#222938] tabular-nums">
+                            {alt.memoryUsageGb !== null ? `${alt.memoryUsageGb.toFixed(1)} GB` : '—'}{' '}
+                            · {alt.inferenceLatencyMs !== null ? `${alt.inferenceLatencyMs} ms` : '—'}{' '}
+                            · Q: {alt.qualityScore !== null ? alt.qualityScore.toFixed(1) : '—'}
+                          </div>
+                          <span
+                            className="text-[11px] text-[#647187] truncate block mt-0.5"
+                            title={alt.reasonNotPreferred}
+                          >
                             {alt.reasonNotPreferred}
                           </span>
                         </div>
                       </div>
 
-                      <button
+                      <Button
+                        variant={isAltSelected ? 'subtle' : 'secondary'}
+                        size="xs"
                         onClick={(e) => {
                           e.stopPropagation();
                           if (targetCand) onSelectCandidate(targetCand);
                         }}
-                        className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs shrink-0 transition-colors"
                       >
-                        View
-                      </button>
+                        {isAltSelected ? 'Active' : 'Inspect'}
+                      </Button>
                     </div>
                   );
-                })}
-              </div>
-            )}
+                })
+              )}
+            </div>
+          )}
 
-            {/* Tab 2: Constraints Compliance Breakdown */}
-            {activeTab === 'constraints' && (
-              <div className="flex flex-col gap-2.5 text-xs">
-                {/* Memory Limit */}
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                  <div className="flex items-center justify-between text-[11px] mb-1 font-bold">
-                    <span className="text-slate-600">Memory Budget (≤ {constraints.maxMemoryGb} GB)</span>
-                    <span
-                      className={`font-extrabold ${
-                        recommended.memoryUsageGb !== null && recommended.memoryUsageGb <= constraints.maxMemoryGb
-                          ? 'text-emerald-600'
-                          : 'text-red-600'
+          {activeTab === 'constraints' && (
+            <div className="space-y-2 text-[12px]">
+              {/* Memory Audit */}
+              <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7]">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[#647187]">
+                    Memory Budget (≤ {constraints.maxMemoryGb.toFixed(1)} GB)
+                  </span>
+                  <span
+                    className={`font-mono font-semibold tabular-nums ${inspected.audit.withinMemoryBudget === false
+                        ? 'text-[#DC2626]'
+                        : 'text-[#0D8A58]'
                       }`}
-                    >
-                      {recommended.memoryUsageGb !== null
-                        ? `${recommended.memoryUsageGb} GB (${recommended.memoryUsageGb <= constraints.maxMemoryGb ? 'Passed' : 'Failed'})`
-                        : 'Unmeasured'}
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${
-                        recommended.memoryUsageGb !== null && recommended.memoryUsageGb <= constraints.maxMemoryGb
-                          ? 'bg-emerald-500'
-                          : 'bg-red-500'
-                      }`}
-                      style={{
-                        width: `${Math.min(100, ((recommended.memoryUsageGb || 0) / 16) * 100)}%`,
-                      }}
-                    />
-                  </div>
+                  >
+                    {inspected.memoryUsageGb !== null
+                      ? `${inspected.memoryUsageGb.toFixed(1)} GB (${inspected.audit.memoryDeltaGb && inspected.audit.memoryDeltaGb > 0
+                        ? `+${inspected.audit.memoryDeltaGb.toFixed(1)}`
+                        : inspected.audit.memoryDeltaGb?.toFixed(1)
+                      } GB)`
+                      : 'Unmeasured'}
+                  </span>
                 </div>
-
-                {/* Latency Threshold */}
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                  <div className="flex items-center justify-between text-[11px] mb-1 font-bold">
-                    <span className="text-slate-600">Latency (≤ {constraints.maxLatencyMs} ms)</span>
-                    <span
-                      className={`font-extrabold ${
-                        recommended.inferenceLatencyMs !== null && recommended.inferenceLatencyMs <= constraints.maxLatencyMs
-                          ? 'text-emerald-600'
-                          : 'text-red-600'
+                <div className="w-full bg-[#E2E6EE] h-1.5 rounded-sm overflow-hidden">
+                  <div
+                    className={`h-full ${inspected.audit.withinMemoryBudget === false
+                        ? 'bg-[#DC2626]'
+                        : 'bg-[#0D8A58]'
                       }`}
-                    >
-                      {recommended.inferenceLatencyMs !== null
-                        ? `${recommended.inferenceLatencyMs} ms (${recommended.inferenceLatencyMs <= constraints.maxLatencyMs ? 'Passed' : 'Failed'})`
-                        : 'Unmeasured'}
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${
-                        recommended.inferenceLatencyMs !== null && recommended.inferenceLatencyMs <= constraints.maxLatencyMs
-                          ? 'bg-emerald-500'
-                          : 'bg-red-500'
-                      }`}
-                      style={{
-                        width: `${Math.min(100, ((recommended.inferenceLatencyMs || 0) / 2000) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Quality Score */}
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                  <div className="flex items-center justify-between text-[11px] mb-1 font-bold">
-                    <span className="text-slate-600">Quality Score (≥ {constraints.minQualityScore})</span>
-                    <span
-                      className={`font-extrabold ${
-                        recommended.qualityScore !== null && recommended.qualityScore >= constraints.minQualityScore
-                          ? 'text-emerald-600'
-                          : 'text-red-600'
-                      }`}
-                    >
-                      {recommended.qualityScore !== null
-                        ? `${recommended.qualityScore} (${recommended.qualityScore >= constraints.minQualityScore ? 'Passed' : 'Failed'})`
-                        : 'Unmeasured'}
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${
-                        recommended.qualityScore !== null && recommended.qualityScore >= constraints.minQualityScore
-                          ? 'bg-emerald-500'
-                          : 'bg-red-500'
-                      }`}
-                      style={{
-                        width: `${Math.min(100, (recommended.qualityScore || 0))}%`,
-                      }}
-                    />
-                  </div>
+                    style={{
+                      width: `${Math.min(100, ((inspected.memoryUsageGb || 0) / 8) * 100)}%`,
+                    }}
+                  />
                 </div>
               </div>
-            )}
 
-            {/* Tab 3: Detailed Analysis */}
-            {activeTab === 'analysis' && (
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col gap-2.5 text-xs text-slate-600">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Generation Throughput:</span>
-                  <span className="font-bold text-[#18213B]">
-                    {recommended.generationSpeedToks ? `${recommended.generationSpeedToks} tokens/sec` : '—'}
+              {/* Latency Audit */}
+              <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7]">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[#647187]">
+                    Latency Limit (≤ {constraints.maxLatencyMs} ms)
+                  </span>
+                  <span
+                    className={`font-mono font-semibold tabular-nums ${inspected.audit.meetsLatencyConstraint === false
+                        ? 'text-[#DC2626]'
+                        : 'text-[#0D8A58]'
+                      }`}
+                  >
+                    {inspected.inferenceLatencyMs !== null
+                      ? `${inspected.inferenceLatencyMs} ms (${inspected.audit.latencyDeltaMs && inspected.audit.latencyDeltaMs > 0
+                        ? `+${inspected.audit.latencyDeltaMs}`
+                        : inspected.audit.latencyDeltaMs
+                      } ms)`
+                      : 'Unmeasured'}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Time to First Token (est):</span>
-                  <span className="font-bold text-[#18213B]">
-                    {recommended.ttftMs ? `${recommended.ttftMs} ms` : '—'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Pareto Frontier Status:</span>
-                  <span className="font-bold text-[#7C6AF2]">
-                    {recommended.isParetoOptimal ? 'Non-Dominated Optimal' : 'Sub-Optimal'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Estimated Switch Overhead:</span>
-                  <span className="font-bold text-[#18213B]">
-                    {constraints.switchingOverheadMs || 120} ms
-                  </span>
+                <div className="w-full bg-[#E2E6EE] h-1.5 rounded-sm overflow-hidden">
+                  <div
+                    className={`h-full ${inspected.audit.meetsLatencyConstraint === false
+                        ? 'bg-[#DC2626]'
+                        : 'bg-[#0D8A58]'
+                      }`}
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        ((inspected.inferenceLatencyMs || 0) / 500) * 100
+                      )}%`,
+                    }}
+                  />
                 </div>
               </div>
-            )}
-          </div>
-        </>
-      ) : (
-        <div className="py-16 text-center text-slate-400 text-xs">
-          Select constraints and click Run Optimization to view recommendations.
+
+              {/* Quality Audit */}
+              <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7]">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[#647187]">
+                    Minimum Quality (≥ {constraints.minQualityScore})
+                  </span>
+                  <span
+                    className={`font-mono font-semibold tabular-nums ${inspected.audit.qualityThresholdSatisfied === false
+                        ? 'text-[#DC2626]'
+                        : 'text-[#0D8A58]'
+                      }`}
+                  >
+                    {inspected.qualityScore !== null
+                      ? `${inspected.qualityScore.toFixed(1)} (${inspected.audit.qualityDeltaScore &&
+                        inspected.audit.qualityDeltaScore >= 0
+                        ? `+${inspected.audit.qualityDeltaScore.toFixed(1)}`
+                        : inspected.audit.qualityDeltaScore?.toFixed(1)
+                      })`
+                      : 'Unmeasured'}
+                  </span>
+                </div>
+                <div className="w-full bg-[#E2E6EE] h-1.5 rounded-sm overflow-hidden">
+                  <div
+                    className={`h-full ${inspected.audit.qualityThresholdSatisfied === false
+                        ? 'bg-[#DC2626]'
+                        : 'bg-[#0D8A58]'
+                      }`}
+                    style={{
+                      width: `${Math.min(100, inspected.qualityScore || 0)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analysis' && (
+            <div className="p-3 rounded-md bg-[#F8F9FB] border border-[#D9DEE7] divide-y divide-[#E6EAF0] text-[12px]">
+              <div className="flex justify-between py-1.5">
+                <span className="text-[#647187]">Inspected Configuration</span>
+                <span className="font-mono font-semibold text-[#222938]">
+                  {inspected.modelName} ({inspected.quantization})
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-[#647187]">Sustained Throughput</span>
+                <span className="font-mono font-semibold text-[#222938] tabular-nums">
+                  {inspected.generationSpeedToks
+                    ? `${inspected.generationSpeedToks} tok/s`
+                    : '—'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-[#647187]">Estimated TTFT</span>
+                <span className="font-mono font-semibold text-[#222938] tabular-nums">
+                  {inspected.ttftMs ? `${inspected.ttftMs} ms` : '—'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-[#647187]">Pareto Frontier Status</span>
+                <span
+                  className={`font-semibold ${inspected.isParetoOptimal ? 'text-[#0D8A58]' : 'text-[#647187]'
+                    }`}
+                >
+                  {inspected.isParetoOptimal ? 'Non-Dominated (Pareto Optimal)' : 'Dominated'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-[#647187]">Switching Overhead Budget</span>
+                <span className="font-mono font-semibold text-[#222938] tabular-nums">
+                  {constraints.switchingOverheadMs ?? 120} ms
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Footer CTA to Evaluate in Experiments */}
+      {onNavigateToExperiments && (
+        <div className="pt-2 border-t border-[#E6EAF0] flex items-center justify-between gap-2">
+          <span className="text-[11px] text-[#647187] font-mono truncate">
+            ID: {decision?.decisionId || 'pending'}
+          </span>
+          <Button
+            variant="subtle"
+            size="sm"
+            onClick={onNavigateToExperiments}
+            rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+          >
+            Evaluate in Experiments
+          </Button>
         </div>
       )}
     </div>

@@ -85,7 +85,7 @@ export const DEFAULT_OPTIMIZATION_CONSTRAINTS: OptimizationConstraints = {
 
 /**
  * Builds candidate records from the selected model family and its variants.
- * Also includes realistic background points from other models for the global Pareto visual space.
+ * Also includes reference points from other models for the global Pareto space.
  */
 export function buildOptimizationCandidates(
   selectedModel: ModelFamily,
@@ -101,7 +101,9 @@ export function buildOptimizationCandidates(
     const quality = v.qualityScore !== undefined ? v.qualityScore : null;
     const speed = v.generationSpeedToks !== undefined ? v.generationSpeedToks : null;
 
-    const isProfiled = v.isProfiled !== false && latency !== null;
+    const hasMeasurements = memory !== null && latency !== null;
+    const canEvaluate =
+      hasMeasurements && (v.isProfiled !== false || Boolean(constraints.allowUnprofiled));
 
     // Constraint evaluation
     const withinMemory = memory !== null ? memory <= constraints.maxMemoryGb : null;
@@ -109,23 +111,31 @@ export function buildOptimizationCandidates(
     const meetsQuality = quality !== null ? quality >= constraints.minQualityScore : null;
 
     const rejectionReasons: string[] = [];
+    if (!v.isProfiled && !constraints.allowUnprofiled) {
+      rejectionReasons.push('Unprofiled configuration (enable "Include unbenchmarked profiles" to evaluate)');
+    }
     if (withinMemory === false) {
-      rejectionReasons.push(`Exceeds memory limit (${memory} GB > ${constraints.maxMemoryGb} GB)`);
+      rejectionReasons.push(
+        `Exceeds memory budget (${memory?.toFixed(1)} GB > ${constraints.maxMemoryGb.toFixed(1)} GB)`
+      );
     }
     if (meetsLatency === false) {
-      rejectionReasons.push(`Exceeds latency limit (${latency} ms > ${constraints.maxLatencyMs} ms)`);
+      rejectionReasons.push(
+        `Exceeds latency limit (${latency} ms > ${constraints.maxLatencyMs} ms)`
+      );
     }
     if (meetsQuality === false) {
-      rejectionReasons.push(`Lower quality score (${quality} < ${constraints.minQualityScore})`);
+      rejectionReasons.push(
+        `Below minimum quality (${quality?.toFixed(1)} < ${constraints.minQualityScore})`
+      );
     }
 
     let status: CandidateFeasibility = 'unprofiled';
-    if (!isProfiled) {
+    if (!canEvaluate) {
       status = 'unprofiled';
     } else if (withinMemory && meetsLatency && meetsQuality) {
       status = 'feasible';
     } else if (
-      // Near feasible: only slightly misses memory or latency by <= 15%
       withinMemory === false &&
       memory !== null &&
       memory <= constraints.maxMemoryGb * 1.15 &&
@@ -139,6 +149,14 @@ export function buildOptimizationCandidates(
       latency <= constraints.maxLatencyMs * 1.2 &&
       withinMemory &&
       meetsQuality
+    ) {
+      status = 'near_feasible';
+    } else if (
+      meetsQuality === false &&
+      quality !== null &&
+      quality >= constraints.minQualityScore - 4 &&
+      withinMemory &&
+      meetsLatency
     ) {
       status = 'near_feasible';
     } else {
@@ -161,18 +179,21 @@ export function buildOptimizationCandidates(
       rejectionReasons,
       audit: {
         withinMemoryBudget: withinMemory,
-        memoryDeltaGb: memory !== null ? Number((memory - constraints.maxMemoryGb).toFixed(2)) : null,
+        memoryDeltaGb:
+          memory !== null ? Number((memory - constraints.maxMemoryGb).toFixed(2)) : null,
         meetsLatencyConstraint: meetsLatency,
-        latencyDeltaMs: latency !== null ? Math.round(latency - constraints.maxLatencyMs) : null,
+        latencyDeltaMs:
+          latency !== null ? Math.round(latency - constraints.maxLatencyMs) : null,
         qualityThresholdSatisfied: meetsQuality,
-        qualityDeltaScore: quality !== null ? Number((quality - constraints.minQualityScore).toFixed(1)) : null,
+        qualityDeltaScore:
+          quality !== null ? Number((quality - constraints.minQualityScore).toFixed(1)) : null,
       },
       provenance: 'demo_fixture',
       isCurrentModelVariant: true,
     });
   });
 
-  // Background reference candidates from other model variants (shown softly in plot)
+  // Reference candidates from other catalog models
   allModels.forEach((m) => {
     if (m.id === selectedModel.id) return;
     m.variants.forEach((v) => {
@@ -184,8 +205,24 @@ export function buildOptimizationCandidates(
       const meetsLatency = latency !== null ? latency <= constraints.maxLatencyMs : null;
       const meetsQuality = quality !== null ? quality >= constraints.minQualityScore : null;
 
+      const canEvaluate =
+        memory !== null &&
+        latency !== null &&
+        (v.isProfiled !== false || Boolean(constraints.allowUnprofiled));
+
+      const rejectionReasons: string[] = [];
+      if (withinMemory === false) {
+        rejectionReasons.push(`Exceeds memory limit (${memory?.toFixed(1)} GB > ${constraints.maxMemoryGb.toFixed(1)} GB)`);
+      }
+      if (meetsLatency === false) {
+        rejectionReasons.push(`Exceeds latency limit (${latency} ms > ${constraints.maxLatencyMs} ms)`);
+      }
+      if (meetsQuality === false) {
+        rejectionReasons.push(`Below quality threshold (${quality?.toFixed(1)} < ${constraints.minQualityScore})`);
+      }
+
       let status: CandidateFeasibility = 'unprofiled';
-      if (!v.isProfiled || latency === null) {
+      if (!canEvaluate) {
         status = 'unprofiled';
       } else if (withinMemory && meetsLatency && meetsQuality) {
         status = 'feasible';
@@ -195,24 +232,28 @@ export function buildOptimizationCandidates(
 
       result.push({
         id: `${m.id}-${v.id}`,
-        name: `${m.name} ${v.name}`,
+        name: `${m.name} (${v.name})`,
         modelName: m.name,
         quantization: v.name,
-        description: `${m.name} ${v.name}`,
+        description: `${m.name} · ${v.descriptionTag || v.name}`,
         format: m.fileFormat,
         memoryUsageGb: memory,
         inferenceLatencyMs: latency,
         generationSpeedToks: v.generationSpeedToks || null,
         qualityScore: quality,
+        ttftMs: latency ? Math.round(latency * 0.45) : null,
         status,
-        rejectionReasons: [],
+        rejectionReasons,
         audit: {
           withinMemoryBudget: withinMemory,
-          memoryDeltaGb: null,
+          memoryDeltaGb:
+            memory !== null ? Number((memory - constraints.maxMemoryGb).toFixed(2)) : null,
           meetsLatencyConstraint: meetsLatency,
-          latencyDeltaMs: null,
+          latencyDeltaMs:
+            latency !== null ? Math.round(latency - constraints.maxLatencyMs) : null,
           qualityThresholdSatisfied: meetsQuality,
-          qualityDeltaScore: null,
+          qualityDeltaScore:
+            quality !== null ? Number((quality - constraints.minQualityScore).toFixed(1)) : null,
         },
         provenance: 'demo_fixture',
         isCurrentModelVariant: false,
@@ -220,13 +261,16 @@ export function buildOptimizationCandidates(
     });
   });
 
-  // Mark Pareto optimal candidates among profiled items
+  // Mark Pareto optimal candidates among evaluable current-model items
   const validForPareto = result.filter(
-    (c) => c.isCurrentModelVariant && c.memoryUsageGb !== null && c.inferenceLatencyMs !== null
+    (c) =>
+      c.isCurrentModelVariant &&
+      c.memoryUsageGb !== null &&
+      c.inferenceLatencyMs !== null &&
+      c.status !== 'unprofiled'
   );
 
   validForPareto.forEach((c1) => {
-    // c1 is dominated if there exists c2 such that c2.memory <= c1.memory and c2.latency <= c1.latency (with at least one <)
     const isDominated = validForPareto.some((c2) => {
       if (c1.id === c2.id) return false;
       const mem1 = c1.memoryUsageGb!;
@@ -252,37 +296,22 @@ export function computeParetoFrontierPoints(
       (c) =>
         c.isCurrentModelVariant &&
         c.memoryUsageGb !== null &&
-        c.inferenceLatencyMs !== null &&
-        c.status !== 'unprofiled'
+        c.inferenceLatencyMs !== null
     )
     .map((c) => [c.memoryUsageGb!, c.inferenceLatencyMs!] as [number, number]);
 
   if (points.length === 0) return [];
 
-  // Sort by memory ascending
   points.sort((a, b) => a[0] - b[0]);
 
-  // Extract non-dominated points where latency strictly decreases as memory increases
   const frontier: Array<[number, number]> = [];
   let minLatency = Infinity;
 
-  // Traverse from highest memory to lowest to construct lower bound
-  for (let i = points.length - 1; i >= 0; i--) {
+  for (let i = 0; i < points.length; i++) {
     if (points[i][1] < minLatency) {
       minLatency = points[i][1];
-      frontier.unshift(points[i]);
+      frontier.push(points[i]);
     }
-  }
-
-  // Prepend & append smooth curve bounds
-  if (frontier.length > 0) {
-    const first = frontier[0];
-    const last = frontier[frontier.length - 1];
-    return [
-      [Math.max(0.5, Number((first[0] * 0.85).toFixed(1))), Math.round(first[1] * 1.35)],
-      ...frontier,
-      [Number((last[0] * 1.15).toFixed(1)), Math.round(last[1] * 0.9)],
-    ];
   }
 
   return frontier;
@@ -290,6 +319,7 @@ export function computeParetoFrontierPoints(
 
 /**
  * Executes or simulates optimization decision.
+ * Never fabricates a feasible winner when all candidates violate constraints.
  */
 export async function evaluateOptimization(
   selectedModel: ModelFamily,
@@ -297,10 +327,10 @@ export async function evaluateOptimization(
   constraints: OptimizationConstraints,
   isConnectedToBackend: boolean
 ): Promise<OptimizationDecisionResult> {
-  // If backend is connected, make real API call
   if (isConnectedToBackend) {
     const req: OptimizationPlanRequest = {
       modelName: selectedModel.name,
+      targetHardware: constraints.targetHardware,
       memoryBudgetGb: constraints.maxMemoryGb,
       maxLatencyMs: constraints.maxLatencyMs,
       minQualityScore: constraints.minQualityScore,
@@ -309,19 +339,22 @@ export async function evaluateOptimization(
     const response = await apiClient.submitOptimizationPlan(req);
 
     const candidates = buildOptimizationCandidates(selectedModel, allModels, constraints);
+    const currentModelCandidates = candidates.filter((c) => c.isCurrentModelVariant);
     const recommended =
-      candidates.find((c) => c.id === response.selectedCandidateId || c.quantization === selectedModel.defaultVariantId) ||
-      candidates.find((c) => c.status === 'feasible') ||
-      candidates[0];
+      currentModelCandidates.find(
+        (c) => c.id === response.selectedCandidateId || c.quantization === response.selectedCandidateId
+      ) ||
+      currentModelCandidates.find((c) => c.status === 'feasible') ||
+      null;
 
-    const alternatives: OptimizationAlternative[] = candidates
-      .filter((c) => c.isCurrentModelVariant && c.id !== recommended.id)
-      .slice(0, 4)
+    const alternatives: OptimizationAlternative[] = currentModelCandidates
+      .filter((c) => c.id !== recommended?.id)
       .map((c) => ({
         candidateId: c.id,
         configurationName: c.name,
         quantization: c.quantization,
-        reasonNotPreferred: c.rejectionReasons[0] || 'Sub-optimal trade-off for current objective',
+        reasonNotPreferred:
+          c.rejectionReasons[0] || 'Sub-optimal trade-off for current objective',
         memoryUsageGb: c.memoryUsageGb,
         inferenceLatencyMs: c.inferenceLatencyMs,
         qualityScore: c.qualityScore,
@@ -332,13 +365,14 @@ export async function evaluateOptimization(
       decisionId: response.decisionId,
       status: response.status,
       recommendedCandidate: recommended,
-      whyThisConfiguration: [
-        'Lowest latency among all feasible candidates',
-        `Meets memory constraint (≤ ${constraints.maxMemoryGb} GB)`,
-        `Exceeds minimum quality threshold (≥ ${constraints.minQualityScore})`,
-        'On Pareto frontier for latency vs memory',
-        'Stable performance profile verified by runtime evidence',
-      ],
+      whyThisConfiguration: recommended
+        ? [
+          `Selected by backend solver for ${constraints.objective} objective`,
+          `Memory usage ${recommended.memoryUsageGb?.toFixed(1)} GB within ≤ ${constraints.maxMemoryGb.toFixed(1)} GB budget`,
+          `Inference latency ${recommended.inferenceLatencyMs} ms within ≤ ${constraints.maxLatencyMs} ms limit`,
+          `Quality score ${recommended.qualityScore?.toFixed(1)} satisfies ≥ ${constraints.minQualityScore} threshold`,
+        ]
+        : ['No candidate profile satisfied all active constraints.'],
       alternatives,
       rationale: response.rationale,
       timestamp: response.timestamp,
@@ -348,39 +382,35 @@ export async function evaluateOptimization(
   }
 
   // Demo mode: deterministic decision calculation
-  await new Promise((r) => setTimeout(r, 450));
+  await new Promise((r) => setTimeout(r, 320));
 
   const candidates = buildOptimizationCandidates(selectedModel, allModels, constraints);
   const currentModelCandidates = candidates.filter((c) => c.isCurrentModelVariant);
 
-  // Filter feasible candidates
   const feasible = currentModelCandidates.filter((c) => c.status === 'feasible');
   const nearFeasible = currentModelCandidates.filter((c) => c.status === 'near_feasible');
 
   let winner: OptimizationCandidate | null = null;
 
-  if (feasible.length > 0) {
-    // Pick based on objective
+  const pickByObjective = (pool: OptimizationCandidate[]): OptimizationCandidate => {
     switch (constraints.objective) {
       case 'latency':
-        winner = feasible.reduce((prev, curr) =>
-          (curr.inferenceLatencyMs ?? Infinity) < (prev.inferenceLatencyMs ?? Infinity) ? curr : prev
+        return pool.reduce((prev, curr) =>
+          (curr.inferenceLatencyMs ?? Infinity) < (prev.inferenceLatencyMs ?? Infinity)
+            ? curr
+            : prev
         );
-        break;
       case 'memory':
-        winner = feasible.reduce((prev, curr) =>
+        return pool.reduce((prev, curr) =>
           (curr.memoryUsageGb ?? Infinity) < (prev.memoryUsageGb ?? Infinity) ? curr : prev
         );
-        break;
       case 'throughput':
-        winner = feasible.reduce((prev, curr) =>
+        return pool.reduce((prev, curr) =>
           (curr.generationSpeedToks ?? 0) > (prev.generationSpeedToks ?? 0) ? curr : prev
         );
-        break;
       case 'balanced':
       default:
-        // Pareto weighted score
-        winner = feasible.reduce((prev, curr) => {
+        return pool.reduce((prev, curr) => {
           const scoreCurr =
             ((curr.qualityScore ?? 70) / 100) * 0.4 +
             (1 - (curr.inferenceLatencyMs ?? 500) / 2000) * 0.35 +
@@ -391,50 +421,90 @@ export async function evaluateOptimization(
             (1 - (prev.memoryUsageGb ?? 8) / 16) * 0.25;
           return scoreCurr > scorePrev ? curr : prev;
         });
-        break;
     }
+  };
+
+  if (feasible.length > 0) {
+    winner = pickByObjective(feasible);
   } else if (nearFeasible.length > 0) {
-    winner = nearFeasible[0];
-  } else if (currentModelCandidates.length > 0) {
-    winner = currentModelCandidates[0];
+    winner = pickByObjective(nearFeasible);
+  } else {
+    winner = null;
   }
 
   const whyPoints: string[] = [];
   if (winner) {
     if (winner.status === 'feasible') {
       if (constraints.objective === 'latency') {
-        whyPoints.push('Lowest latency among all feasible candidates');
+        whyPoints.push(
+          `Lowest inference latency (${winner.inferenceLatencyMs} ms) among feasible candidates`
+        );
       } else if (constraints.objective === 'memory') {
-        whyPoints.push('Smallest memory footprint among all feasible candidates');
+        whyPoints.push(
+          `Smallest memory footprint (${winner.memoryUsageGb?.toFixed(1)} GB) among feasible candidates`
+        );
       } else if (constraints.objective === 'throughput') {
-        whyPoints.push('Highest token generation speed among all feasible candidates');
+        whyPoints.push(
+          `Highest generation speed (${winner.generationSpeedToks} tok/s) among feasible candidates`
+        );
       } else {
-        whyPoints.push('Optimal balance across latency, memory, and quality retention');
+        whyPoints.push('Highest composite Pareto score across memory, latency, and quality');
       }
-      whyPoints.push(`Meets memory constraint (≤ ${constraints.maxMemoryGb} GB)`);
-      whyPoints.push(`Exceeds minimum quality threshold (≥ ${constraints.minQualityScore})`);
+      whyPoints.push(
+        `Fits within memory budget (${winner.memoryUsageGb?.toFixed(1)} GB ≤ ${constraints.maxMemoryGb.toFixed(1)} GB)`
+      );
+      whyPoints.push(
+        `Satisfies latency limit (${winner.inferenceLatencyMs} ms ≤ ${constraints.maxLatencyMs} ms)`
+      );
+      whyPoints.push(
+        `Exceeds minimum quality threshold (${winner.qualityScore?.toFixed(1)} ≥ ${constraints.minQualityScore})`
+      );
       if (winner.isParetoOptimal) {
-        whyPoints.push('On Pareto frontier for latency vs memory');
+        whyPoints.push('Sits on the non-dominated Pareto efficiency frontier');
       }
-      whyPoints.push('Stable performance profile with verified compatibility');
     } else {
-      whyPoints.push('Best alternative candidate closest to satisfying constraints');
-      whyPoints.push(`Memory: ${winner.memoryUsageGb} GB vs target ${constraints.maxMemoryGb} GB`);
-      whyPoints.push(`Latency: ${winner.inferenceLatencyMs} ms vs limit ${constraints.maxLatencyMs} ms`);
+      whyPoints.push(
+        'No configuration strictly satisfied all limits; showing closest near-feasible candidate'
+      );
+      whyPoints.push(
+        `Memory: ${winner.memoryUsageGb?.toFixed(1)} GB vs ${constraints.maxMemoryGb.toFixed(1)} GB budget`
+      );
+      whyPoints.push(
+        `Latency: ${winner.inferenceLatencyMs} ms vs ${constraints.maxLatencyMs} ms limit`
+      );
+      whyPoints.push(
+        `Quality: ${winner.qualityScore?.toFixed(1)} vs ${constraints.minQualityScore} minimum`
+      );
     }
+  } else {
+    whyPoints.push(
+      `0 of ${currentModelCandidates.length} configurations for ${selectedModel.name} satisfied the active constraints.`
+    );
+    whyPoints.push(
+      'Relax Max Memory, Max Latency, or Min Quality, or enable "Include unbenchmarked profiles" in Advanced Options.'
+    );
   }
 
   const alternatives: OptimizationAlternative[] = currentModelCandidates
     .filter((c) => c.id !== winner?.id)
-    .slice(0, 4)
     .map((c) => {
       let reason = 'Sub-optimal trade-off for current objective';
       if (c.rejectionReasons.length > 0) {
         reason = c.rejectionReasons[0];
-      } else if (winner && c.inferenceLatencyMs && winner.inferenceLatencyMs && c.inferenceLatencyMs > winner.inferenceLatencyMs) {
-        reason = `Meets memory limit but higher latency (${c.inferenceLatencyMs} ms > ${winner.inferenceLatencyMs} ms)`;
-      } else if (winner && c.memoryUsageGb && winner.memoryUsageGb && c.memoryUsageGb > winner.memoryUsageGb) {
-        reason = `Higher quality but exceeds memory limit (${c.memoryUsageGb} GB)`;
+      } else if (
+        winner &&
+        c.inferenceLatencyMs !== null &&
+        winner.inferenceLatencyMs !== null &&
+        c.inferenceLatencyMs > winner.inferenceLatencyMs
+      ) {
+        reason = `Feasible, but slower latency (${c.inferenceLatencyMs} ms vs ${winner.inferenceLatencyMs} ms)`;
+      } else if (
+        winner &&
+        c.memoryUsageGb !== null &&
+        winner.memoryUsageGb !== null &&
+        c.memoryUsageGb > winner.memoryUsageGb
+      ) {
+        reason = `Feasible, but higher memory (${c.memoryUsageGb.toFixed(1)} GB vs ${winner.memoryUsageGb.toFixed(1)} GB)`;
       }
 
       return {
@@ -451,13 +521,16 @@ export async function evaluateOptimization(
 
   return {
     decisionId: `dec-sim-${Date.now().toString(36)}`,
-    status: feasible.length > 0 ? 'optimal' : nearFeasible.length > 0 ? 'feasible' : 'infeasible',
+    status:
+      feasible.length > 0 ? 'optimal' : nearFeasible.length > 0 ? 'feasible' : 'infeasible',
     recommendedCandidate: winner,
     whyThisConfiguration: whyPoints,
     alternatives,
     rationale: winner
-      ? `Selected ${winner.quantization} for ${selectedModel.name} as the best trade-off for ${constraints.workloadType} under ${constraints.objective} objective.`
-      : 'No candidate satisfied the provided constraints.',
+      ? winner.status === 'feasible'
+        ? `Selected ${winner.quantization} for ${selectedModel.name} as the optimal configuration for ${constraints.workloadType} workload under the ${constraints.objective} objective.`
+        : `No strictly feasible candidate found; ${winner.quantization} is the closest near-feasible configuration within tolerance.`
+      : `No candidate configuration for ${selectedModel.name} met the required memory (≤ ${constraints.maxMemoryGb.toFixed(1)} GB), latency (≤ ${constraints.maxLatencyMs} ms), and quality (≥ ${constraints.minQualityScore}) constraints.`,
     timestamp: new Date().toISOString(),
     isLiveResponse: false,
     algorithm: 'Lattice Deterministic Pareto Solver v1.0',

@@ -24,84 +24,88 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleFullscreen,
 }) => {
   return (
-    <header className="w-full px-6 pt-3 pb-2 flex flex-col gap-1.5 select-none z-20">
-      {/* Top Row: Breadcrumb on Left | Backend Pill, Search, Bell & Window Controls on Right */}
+    <header className="w-full px-6 pt-3 pb-3 flex flex-col gap-2 border-b border-[#D9DEE7] bg-white select-none z-20">
+      {/* Top Row: Breadcrumb on Left | Backend Status, Utilities & Window Controls on Right */}
       <div className="flex items-center justify-between">
-        {/* Breadcrumb */}
-        <button className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-[#18213B] transition-colors">
-          <ChevronLeft className="w-3.5 h-3.5 text-slate-400" />
-          <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2" />
-            <circle cx="8" cy="8" r="2" fill="currentColor" />
-          </svg>
-          <span className="text-[#18213B] font-semibold">Overview</span>
+        <button
+          type="button"
+          className="flex items-center gap-1.5 text-[12px] font-medium text-[#647187] hover:text-[#222938] transition-colors cursor-pointer"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+          <span className="text-[#222938] font-semibold">Overview</span>
         </button>
 
-        {/* Right Status & Window Bar */}
-        <div className="flex items-center gap-2.5">
-          {/* 2-Line Backend Status Pill */}
+        <div className="flex items-center gap-2">
+          {/* Semantic Connection Status Button */}
           <button
+            type="button"
             onClick={onRefreshConnection}
             title={
               backendState.connected
                 ? `Connected to ${backendState.service} (${backendState.endpoint})`
-                : `Backend unreachable. Click to retry.`
+                : 'Backend unreachable. Click to retry connection.'
             }
-            className={`flex items-center gap-2.5 px-3.5 py-1 rounded-full border transition-all duration-200 text-left ${backendState.connected
-                ? 'bg-[#E6F4EA]/90 border-emerald-200/80 hover:bg-[#DCF0E2]'
-                : 'bg-amber-50/90 border-amber-200/80 hover:bg-amber-100/80'
+            className={`flex items-center gap-2 px-2.5 py-1 rounded-md border text-[11.5px] transition-colors cursor-pointer ${backendState.connected
+                ? 'bg-[#ECFDF5] border-[#A7F3D0] text-[#0D8A58] hover:bg-[#D1FAE5]'
+                : 'bg-[#FFFBEB] border-[#FDE68A] text-[#B45309] hover:bg-[#FEF3C7]'
               }`}
           >
             <span
-              className={`w-2.5 h-2.5 rounded-full shrink-0 ${backendState.connected
-                  ? 'bg-[#10B981] shadow-[0_0_8px_rgba(16,185,129,0.6)]'
-                  : 'bg-amber-500'
+              className={`w-2 h-2 rounded-full shrink-0 ${backendState.connected ? 'bg-[#0D8A58]' : 'bg-[#D97706]'
                 }`}
             />
-            <div className="flex flex-col leading-tight">
-              <span className="text-[11px] font-bold text-[#18213B]">
-                {backendState.connected ? 'Backend Connected' : 'Demo Mode'}
-              </span>
-              <span className="text-[10px] font-mono text-slate-500">
-                {backendState.endpoint}
-              </span>
-            </div>
+            <span className="font-semibold">
+              {backendState.connected ? 'Backend Connected' : 'Demo Mode'}
+            </span>
+            <span className="font-mono text-[11px] opacity-85">
+              {backendState.endpoint}
+            </span>
           </button>
 
-          {/* Search Icon */}
+          {/* Search Button */}
           <button
+            type="button"
+            aria-label="Search"
             title="Search"
-            className="p-2 rounded-full text-slate-600 hover:text-[#18213B] hover:bg-white/70 transition-all"
+            className="h-7 w-7 rounded-md flex items-center justify-center text-[#647187] hover:text-[#222938] hover:bg-[#F8F9FB] border border-transparent hover:border-[#D9DEE7] transition-colors cursor-pointer"
           >
-            <Search className="w-4 h-4 stroke-[2]" />
+            <Search className="w-3.5 h-3.5" />
           </button>
 
-          {/* Bell Notification Icon with Purple Badge Dot */}
+          {/* Notifications Button */}
           <button
+            type="button"
+            aria-label="Notifications"
             title="Notifications"
-            className="relative p-2 rounded-full text-slate-600 hover:text-[#18213B] hover:bg-white/70 transition-all"
+            className="relative h-7 w-7 rounded-md flex items-center justify-center text-[#647187] hover:text-[#222938] hover:bg-[#F8F9FB] border border-transparent hover:border-[#D9DEE7] transition-colors cursor-pointer"
           >
-            <Bell className="w-4 h-4 stroke-[2]" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#8174F5] ring-2 ring-white" />
+            <Bell className="w-3.5 h-3.5" />
+            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#7562E8]" />
           </button>
 
           {/* Window Controls */}
-          <div className="flex items-center gap-1 ml-1 pl-2 border-l border-slate-200/80">
+          <div className="flex items-center gap-0.5 ml-1 pl-2 border-l border-[#D9DEE7]">
             <button
+              type="button"
+              aria-label="Minimize Window"
               title="Minimize"
-              className="p-1.5 rounded-lg text-slate-500 hover:text-[#18213B] hover:bg-slate-200/60 transition-colors"
+              className="h-7 w-7 rounded-md flex items-center justify-center text-[#647187] hover:text-[#222938] hover:bg-[#F8F9FB] transition-colors"
             >
               <Minus className="w-3.5 h-3.5" />
             </button>
             <button
+              type="button"
+              aria-label="Maximize Window"
               title="Maximize"
-              className="p-1.5 rounded-lg text-slate-500 hover:text-[#18213B] hover:bg-slate-200/60 transition-colors"
+              className="h-7 w-7 rounded-md flex items-center justify-center text-[#647187] hover:text-[#222938] hover:bg-[#F8F9FB] transition-colors"
             >
               <Square className="w-3 h-3" />
             </button>
             <button
+              type="button"
+              aria-label="Close Window"
               title="Close"
-              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+              className="h-7 w-7 rounded-md flex items-center justify-center text-[#647187] hover:text-[#DC2626] hover:bg-red-50 transition-colors"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -109,33 +113,37 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Bottom Row: Title & Subtitle on Left | View Mode Selector & Fullscreen on Right */}
-      <div className="flex items-end justify-between pt-0.5">
+      {/* Bottom Row: Page Title & View Controls */}
+      <div className="flex items-end justify-between">
         <div>
-          <h2 className="text-[26px] leading-tight font-extrabold text-[#18213B] tracking-tight">
+          <h2 className="text-[26px] leading-tight font-semibold text-[#222938] tracking-tight">
             System Overview
           </h2>
-          <p className="text-[13px] text-slate-500 font-normal mt-0.5">
+          <p className="text-[13px] text-[#647187] font-normal mt-0.5">
             Live view of your models, resources and optimization experiments.
           </p>
         </div>
 
-        {/* View Selector & Fullscreen Button */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/85 backdrop-blur-md border border-white/90 shadow-sm text-xs">
-            <span className="text-slate-400 font-medium">View</span>
-            <div className="w-[1px] h-3.5 bg-slate-200" />
-            <button className="flex items-center gap-1.5 font-semibold text-[#18213B] hover:text-[#8174F5] transition-colors">
-              <GitFork className="w-3.5 h-3.5 text-slate-500 rotate-90" />
+          <div className="flex items-center gap-2 h-8 px-2.5 rounded-md bg-white border border-[#D9DEE7] text-[12px]">
+            <span className="text-[#647187] font-medium">View</span>
+            <div className="w-[1px] h-3.5 bg-[#D9DEE7]" />
+            <button
+              type="button"
+              className="flex items-center gap-1.5 font-semibold text-[#222938] hover:text-[#7562E8] transition-colors cursor-pointer"
+            >
+              <GitFork className="w-3.5 h-3.5 text-[#647187] rotate-90" />
               <span>Lattice Topology</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-0.5" />
+              <ChevronDown className="w-3.5 h-3.5 text-[#647187]" />
             </button>
           </div>
 
           <button
+            type="button"
             onClick={onToggleFullscreen}
+            aria-label="Toggle Fullscreen View"
             title="Toggle Fullscreen View"
-            className="p-2 rounded-xl bg-white/85 backdrop-blur-md border border-white/90 text-slate-600 hover:text-[#18213B] hover:bg-white transition-all shadow-sm"
+            className="h-8 w-8 rounded-md bg-white border border-[#D9DEE7] flex items-center justify-center text-[#647187] hover:text-[#222938] hover:bg-[#F8F9FB] transition-colors cursor-pointer"
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>

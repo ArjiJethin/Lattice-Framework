@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ModelFamily, QuantizationVariant } from '../../types/modelLibrary';
-import { FileText, Download, CheckCircle, FolderOpen, Copy, Check } from 'lucide-react';
+import { StatusBadge } from '../ui/primitives';
+import { FileText, FolderOpen, Copy, Check } from 'lucide-react';
 
 interface ModelFilesTabProps {
   model: ModelFamily;
@@ -11,7 +12,7 @@ export const ModelFilesTab: React.FC<ModelFilesTabProps> = ({
   model,
   selectedVariant,
 }) => {
-  const [copiedId, setCopiedId] = React.useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopyPath = (path: string, id: string) => {
     if (navigator?.clipboard) {
@@ -22,18 +23,16 @@ export const ModelFilesTab: React.FC<ModelFilesTabProps> = ({
   };
 
   return (
-    <div className="space-y-2.5 text-xs select-none">
-      {/* Header Row */}
-      <div className="flex items-center justify-between text-slate-500 font-semibold text-[11px] px-0.5">
+    <div className="space-y-2 text-[12px] select-none">
+      <div className="flex items-center justify-between text-[#647187] font-semibold text-[11px] px-0.5">
         <span>Model Package Files ({model.variants.length})</span>
-        <span className="flex items-center gap-1 text-[#7C6AF2] font-mono text-[10.5px]">
+        <span className="flex items-center gap-1 text-[#7562E8] font-mono text-[10.5px]">
           <FolderOpen className="w-3.5 h-3.5 shrink-0" />
           <span>D:\models</span>
         </span>
       </div>
 
-      {/* File Cards List — Scrolls smoothly via parent container without double scrollbars */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {model.variants.map((v) => {
           const isCurrent = v.id === selectedVariant.id;
           const path =
@@ -42,44 +41,36 @@ export const ModelFilesTab: React.FC<ModelFilesTabProps> = ({
           return (
             <div
               key={v.id}
-              className={`p-3 rounded-xl border transition-all ${isCurrent
-                  ? 'bg-[#F5F3FF]/90 border-[#8174F5] shadow-2xs'
-                  : 'bg-white/90 border-slate-200/80 hover:border-slate-300'
+              className={`p-2.5 rounded-md border transition-colors ${isCurrent
+                  ? 'bg-[#F2F0FD] border-[#7562E8]'
+                  : 'bg-white border-[#D9DEE7] hover:border-[#C3CBD8]'
                 }`}
             >
               <div className="flex items-center justify-between gap-2 mb-1.5">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
                   <FileText
-                    className={`w-3.5 h-3.5 shrink-0 ${isCurrent ? 'text-[#7C6AF2]' : 'text-slate-400'
+                    className={`w-3.5 h-3.5 shrink-0 ${isCurrent ? 'text-[#7562E8]' : 'text-[#647187]'
                       }`}
                   />
-                  <span className="font-extrabold text-[#18213B] text-[12px] truncate">
+                  <span className="font-mono font-semibold text-[#222938] text-[12px] truncate">
                     {v.name}
                   </span>
-                  <span className="text-[10.5px] text-slate-400 font-medium shrink-0">
+                  <span className="text-[11px] font-mono text-[#647187] shrink-0 tabular-nums">
                     ({v.fileSizeGb ? `${v.fileSizeGb} GB` : 'Unknown'})
                   </span>
                 </div>
 
-                <div className="shrink-0">
-                  {v.isInstalled ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-[#0D8A58] font-bold bg-[#E6F4EA] px-2 py-0.5 rounded-full">
-                      <CheckCircle className="w-3 h-3" />
-                      <span>Ready</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-full">
-                      <Download className="w-3 h-3" />
-                      <span>Not Cached</span>
-                    </span>
-                  )}
-                </div>
+                <StatusBadge
+                  tone={v.isInstalled ? 'success' : 'neutral'}
+                  dot={v.isInstalled}
+                >
+                  {v.isInstalled ? 'Ready' : 'Not Cached'}
+                </StatusBadge>
               </div>
 
-              {/* File Path Row */}
-              <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
+              <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-[#E6EAF0]">
                 <span
-                  className="text-[10px] font-mono text-slate-500 truncate"
+                  className="text-[10.5px] font-mono text-[#647187] truncate"
                   title={path}
                 >
                   {path}
@@ -87,11 +78,12 @@ export const ModelFilesTab: React.FC<ModelFilesTabProps> = ({
                 <button
                   type="button"
                   onClick={() => handleCopyPath(path, v.id)}
+                  aria-label="Copy File Path"
                   title="Copy File Path"
-                  className="p-1 rounded-md text-slate-400 hover:text-[#7C6AF2] hover:bg-purple-50 transition-colors shrink-0"
+                  className="p-1 rounded-sm text-[#647187] hover:text-[#7562E8] hover:bg-white transition-colors shrink-0 cursor-pointer"
                 >
                   {copiedId === v.id ? (
-                    <Check className="w-3 h-3 text-emerald-600" />
+                    <Check className="w-3 h-3 text-[#0D8A58]" />
                   ) : (
                     <Copy className="w-3 h-3" />
                   )}
