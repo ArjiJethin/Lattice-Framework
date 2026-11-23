@@ -40,9 +40,9 @@ export const DEFAULT_LATTICE_SETTINGS: LatticeSettings = {
     telemetry: false,
   },
   storage: {
-    modelStoragePath: 'C:\\Lattice\\models',
-    cacheDirectory: 'C:\\Lattice\\cache',
-    usedStorageGb: 12.6,
+    modelStoragePath: 'C:\\Users\\ACER\\Desktop\\Projects\\Lattice - LLM Inference Optimizer\\Lattice-Framework\\models',
+    cacheDirectory: 'C:\\Users\\ACER\\Desktop\\Projects\\Lattice - LLM Inference Optimizer\\Lattice-Framework\\experiments',
+    usedStorageGb: 0.5,
     freeStorageGb: 48.2,
     totalStorageGb: 60.8,
   },

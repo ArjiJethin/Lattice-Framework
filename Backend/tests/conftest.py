@@ -31,6 +31,7 @@ def build_settings(tmp_path: Path, model_root: Path, **overrides: Any) -> Settin
         "benchmark_default_repetitions": 3,
         "benchmark_default_warmups": 1,
         "log_level": "WARNING",
+        "allow_output_retention": False,
     }
     values.update(overrides)
     return Settings(**values)

@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     benchmarks,
     configurations,
+    contract,
     health,
     history,
     inference,
@@ -17,6 +18,7 @@ from app.api.routes import (
 
 api_router = APIRouter()
 api_router.include_router(health.router)
+api_router.include_router(contract.router)
 api_router.include_router(configurations.router)
 api_router.include_router(workloads.router)
 api_router.include_router(benchmarks.router)
