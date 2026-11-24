@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -11,11 +11,18 @@ from app.core.validation import validate_generation_parameters
 from app.schemas.common import APIModel, Page
 
 
+class InferenceMessage(APIModel):
+    role: Literal["system", "user", "assistant"]
+    content: str = Field(min_length=1, max_length=32_000)
+
+
 class InferenceCreate(APIModel):
     configuration_id: str | None = None
     decision_id: str | None = None
     prompt: str = Field(min_length=1, max_length=64_000)
     system_prompt: str | None = Field(default=None, max_length=16_000)
+    #: Optional chat turns; the runtime applies the model's own chat template.
+    messages: list[InferenceMessage] | None = Field(default=None, max_length=64)
     generation_parameters: dict[str, Any] = Field(default_factory=dict)
     timeout_seconds: float | None = Field(default=None, gt=0, le=3600)
     retain_output: bool = False

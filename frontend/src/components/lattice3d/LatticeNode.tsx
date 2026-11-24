@@ -208,6 +208,86 @@ const PedestalSocket: React.FC<{
   );
 });
 
+/** Each quantization gets its own crystal palette so candidate nodes read as
+ *  distinct profiles rather than copies of the same object. */
+const QUANTIZATION_PALETTES: Record<
+  string,
+  {
+    shellTint: string;
+    innerOcta: string;
+    edge: string;
+    faceDiag: string;
+    glow: string;
+    shellOpacity: number;
+  }
+> = {
+  Q2_K: {
+    shellTint: '#F1F5F9',
+    innerOcta: '#64748B',
+    edge: '#FFFFFF',
+    faceDiag: '#E2E8F0',
+    glow: '#94A3B8',
+    shellOpacity: 0.22,
+  },
+  Q3_K_M: {
+    shellTint: '#A7F3D0',
+    innerOcta: '#059669',
+    edge: '#ECFDF5',
+    faceDiag: '#6EE7B7',
+    glow: '#10B981',
+    shellOpacity: 0.24,
+  },
+  Q4_K_M: {
+    shellTint: '#BAE6FD',
+    innerOcta: '#2563EB',
+    edge: '#EFF6FF',
+    faceDiag: '#93C5FD',
+    glow: '#3B82F6',
+    shellOpacity: 0.25,
+  },
+  Q5_K_M: {
+    shellTint: '#FDE68A',
+    innerOcta: '#D97706',
+    edge: '#FFFBEB',
+    faceDiag: '#FCD34D',
+    glow: '#F59E0B',
+    shellOpacity: 0.24,
+  },
+  Q6_K: {
+    shellTint: '#99F6E4',
+    innerOcta: '#0F766E',
+    edge: '#F0FDFA',
+    faceDiag: '#5EEAD4',
+    glow: '#14B8A6',
+    shellOpacity: 0.24,
+  },
+  Q8_0: {
+    shellTint: '#FBCFE8',
+    innerOcta: '#DB2777',
+    edge: '#FDF2F8',
+    faceDiag: '#F9A8D4',
+    glow: '#EC4899',
+    shellOpacity: 0.24,
+  },
+  FP16: {
+    shellTint: '#DDD6FE',
+    innerOcta: '#6D28D9',
+    edge: '#F5F3FF',
+    faceDiag: '#C4B5FD',
+    glow: '#8B5CF6',
+    shellOpacity: 0.24,
+  },
+};
+
+const DEFAULT_PALETTE = {
+  shellTint: '#BAE6FD',
+  innerOcta: '#2563EB',
+  edge: '#EFF6FF',
+  faceDiag: '#93C5FD',
+  glow: '#3B82F6',
+  shellOpacity: 0.25,
+};
+
 export const LatticeNode: React.FC<LatticeNodeProps> = ({
   candidate,
   isSelected,
@@ -221,10 +301,7 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
   const size = isOptimizer ? 1.56 : 0.95;
 
   const palette = useMemo(() => {
-    const nameLower = (candidate.name || '').toLowerCase();
-    const idLower = (candidate.id || '').toLowerCase();
-
-    if (isOptimizer || nameLower.includes('optimizer')) {
+    if (isOptimizer) {
       return {
         shellTint: '#DDD6FE',
         innerOcta: '#7C3AED',
@@ -234,39 +311,9 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
         shellOpacity: 0.26,
       };
     }
-    if (idLower.includes('cand-b') || nameLower.includes('candidate b')) {
-      return {
-        shellTint: '#F1F5F9',
-        innerOcta: '#64748B',
-        edge: '#FFFFFF',
-        faceDiag: '#E2E8F0',
-        glow: '#94A3B8',
-        shellOpacity: 0.22,
-      };
-    }
-    if (
-      idLower.includes('cand-c') ||
-      nameLower.includes('candidate c') ||
-      nameLower.includes('evaluation')
-    ) {
-      return {
-        shellTint: '#A7F3D0',
-        innerOcta: '#059669',
-        edge: '#ECFDF5',
-        faceDiag: '#6EE7B7',
-        glow: '#10B981',
-        shellOpacity: 0.24,
-      };
-    }
-    return {
-      shellTint: '#BAE6FD',
-      innerOcta: '#2563EB',
-      edge: '#EFF6FF',
-      faceDiag: '#93C5FD',
-      glow: '#3B82F6',
-      shellOpacity: 0.25,
-    };
-  }, [candidate.id, candidate.name, isOptimizer]);
+    const quantization = (candidate.quantization || '').toUpperCase();
+    return QUANTIZATION_PALETTES[quantization] ?? DEFAULT_PALETTE;
+  }, [candidate.quantization, isOptimizer]);
 
   const labelPlacement = useMemo(() => {
     const nameLower = (candidate.name || '').toLowerCase();
@@ -427,9 +474,10 @@ export const LatticeNode: React.FC<LatticeNodeProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-[#7562E8]" />
               )}
             </div>
-            {candidate.subLabel && (
+            {(candidate.subLabel ||
+              (candidate.badgeText && candidate.badgeText !== 'Selected')) && (
               <div className="text-[10px] font-mono text-[#647187] leading-tight mt-0.5">
-                {candidate.subLabel}
+                {candidate.subLabel ?? candidate.badgeText}
               </div>
             )}
           </div>

@@ -338,11 +338,21 @@ export async function evaluateOptimization(
     };
     const response = await apiClient.submitOptimizationPlan(req);
 
+    // The backend solver answers with its own configuration profiles; match the
+    // winner back to the local variant by id, then by quantization.
+    const backendWinner = response.candidateProfiles?.find(
+      (c) => c.id === response.selectedCandidateId
+    );
+
     const candidates = buildOptimizationCandidates(selectedModel, allModels, constraints);
     const currentModelCandidates = candidates.filter((c) => c.isCurrentModelVariant);
     const recommended =
       currentModelCandidates.find(
-        (c) => c.id === response.selectedCandidateId || c.quantization === response.selectedCandidateId
+        (c) =>
+          c.id === response.selectedCandidateId ||
+          (backendWinner
+            ? c.quantization === backendWinner.quantization
+            : c.quantization === response.selectedCandidateId)
       ) ||
       currentModelCandidates.find((c) => c.status === 'feasible') ||
       null;

@@ -6,17 +6,22 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npx tsc -b && npx vite build",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
-        "title": "Lattice Framework",
-        "width": 1280,
-        "height": 800,
+        "title": "Lattice",
+        "width": 1360,
+        "height": 860,
+        "minWidth": 1080,
+        "minHeight": 680,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "center": true,
+        "decorations": true,
+        "transparent": false
       }
     ],
     "security": {
@@ -25,6 +30,15 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": ["nsis"],
+    "publisher": "Lattice",
+    "shortDescription": "Local LLM inference optimizer",
+    "longDescription": "Lattice benchmarks and optimizes local GGUF language models on the machine that runs them.",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English"]
+      }
+    }
   }
 }

@@ -152,7 +152,12 @@ class Settings(BaseSettings):
     allow_test_only_optimization_evidence: bool = False
 
     # --- Privacy ----------------------------------------------------------
-    allow_output_retention: bool = False
+    # Retention stays opt-in per request (`retain_output: true`); this only
+    # controls whether the server is *allowed* to honour such a request.  The
+    # desktop chat UI needs the generated text back, so the default is on for
+    # this single-user research build.  Set LATTICE_ALLOW_OUTPUT_RETENTION=false
+    # to refuse all retention (the API then answers 422).
+    allow_output_retention: bool = True
     max_retained_output_chars: int = 8000
 
     # --- History / import-export -----------------------------------------

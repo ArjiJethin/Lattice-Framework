@@ -53,10 +53,12 @@
   }
 
   body {
-    background-color: #F5F6F8;
-    color: #222938;
-    font-family: 'Inter', 'Geist Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    background-color: #F2F3F5;
+    color: #1F2633;
+    font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, 'Inter', Roboto, sans-serif;
+    font-size: 13px;
+    font-feature-settings: "kern", "tnum";
+    letter-spacing: -0.003em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     user-select: none;
@@ -70,14 +72,14 @@
   textarea:focus-visible,
   [role="switch"]:focus-visible,
   [role="tab"]:focus-visible {
-    outline: 2px solid #7562E8;
+    outline: 1px solid #5B4BD4;
     outline-offset: 1px;
   }
 }
 
-/* Application Workspace Background - Clean neutral engineering canvas */
+/* Application Workspace Background - Clean neutral desktop canvas */
 .lattice-window-bg {
-  background-color: #F5F6F8;
+  background-color: #F2F3F5;
 }
 
 /* Standardized Surface Classes (Replacing heavy decorative blur/glows with crisp 1px borders) */
@@ -94,11 +96,9 @@
 }
 
 .glass-floating {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid #D9DEE7;
-  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+  background: #FFFFFF;
+  border: 1px solid #C9D0DA;
+  box-shadow: 0 3px 10px -2px rgba(15, 23, 42, 0.10);
 }
 
 .glass-subtle {
@@ -126,7 +126,7 @@ input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   background: #E2E6EE;
-  height: 6px;
+  height: 4px;
   border-radius: 3px;
   border: 1px solid #D0D7E2;
 }
@@ -134,14 +134,14 @@ input[type="range"] {
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 4px;
-  background: #7562E8;
-  border: 2px solid #FFFFFF;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+  background: #5B4BD4;
+  border: 1px solid #FFFFFF;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
   cursor: pointer;
-  transition: background-color 0.15s ease, transform 0.1s ease;
+  transition: background-color 0.15s ease;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
@@ -173,8 +173,9 @@ input[type="range"]::-moz-range-thumb {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #CBD2DF;
+  background: #C1C8D4;
   border-radius: 3px;
+  border: 1px solid #F2F3F5;
 }
 
 ::-webkit-scrollbar-thumb:hover {

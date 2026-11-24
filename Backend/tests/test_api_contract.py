@@ -80,12 +80,13 @@ def test_contract_trends(client: TestClient) -> None:
     trend_data = data["data"]
     assert "timeRange" in trend_data
     assert "points" in trend_data
-    assert len(trend_data["points"]) >= 1
-    pt = trend_data["points"][0]
-    assert "run" in pt
-    assert "latencyMs" in pt
-    assert "throughputToks" in pt
-    assert "gpuMemoryGb" in pt
+    assert isinstance(trend_data["points"], list)
+    # Trends contain measured benchmark runs only; no fixture points are fabricated.
+    for pt in trend_data["points"]:
+        assert "run" in pt
+        assert "latencyMs" in pt
+        assert "throughputToks" in pt
+        assert "gpuMemoryGb" in pt
 
 
 def test_contract_optimization_plan(client: TestClient) -> None:

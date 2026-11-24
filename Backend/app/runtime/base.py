@@ -144,10 +144,14 @@ class ValidationResult:
 class GenerationRequest:
     prompt: str
     system_prompt: str | None = None
+    #: Optional chat turns.  When present the adapter can apply the model's own
+    #: chat template instead of continuing a raw completion.
+    messages: list[dict[str, str]] | None = None
     max_tokens: int = 128
     temperature: float = 0.2
     top_p: float = 0.95
     top_k: int = 40
+    repeat_penalty: float = 1.0
     stop: tuple[str, ...] = ()
     seed: int | None = None
     timeout_seconds: float = 120.0
@@ -160,6 +164,7 @@ class GenerationRequest:
         parameters: dict[str, Any],
         *,
         system_prompt: str | None = None,
+        messages: list[dict[str, str]] | None = None,
         default_max_tokens: int = 128,
         timeout_seconds: float = 120.0,
         stream: bool = True,
@@ -168,10 +173,12 @@ class GenerationRequest:
         return cls(
             prompt=prompt,
             system_prompt=system_prompt,
+            messages=messages,
             max_tokens=int(parameters.get("max_tokens", default_max_tokens)),
             temperature=float(parameters.get("temperature", 0.2)),
             top_p=float(parameters.get("top_p", 0.95)),
             top_k=int(parameters.get("top_k", 40)),
+            repeat_penalty=float(parameters.get("repeat_penalty", 1.0)),
             stop=tuple(stop) if isinstance(stop, (list, tuple)) else (),
             seed=(int(parameters["seed"]) if parameters.get("seed") is not None else None),
             timeout_seconds=timeout_seconds,

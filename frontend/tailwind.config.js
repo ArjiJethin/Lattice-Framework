@@ -61,36 +61,35 @@ export default {
         DEFAULT: "0.375rem", /* 6px */
         md: "0.375rem",   /* 6px - buttons, inputs, selects */
         lg: "0.5rem",     /* 8px - standard cards */
-        xl: "0.5rem",     /* 8px - normalized from 16px to 8px */
+        xl: "0.5rem",     /* 8px */
         "2xl": "0.625rem", /* 10px - major panels */
         "3xl": "0.75rem",  /* 12px - modals & dialogs */
       },
       boxShadow: {
-        "2xs": "0 1px 2px 0 rgba(15, 23, 42, 0.03)",
-        xs: "0 1px 2px 0 rgba(15, 23, 42, 0.04)",
-        sm: "0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.03)",
-        glass: "0 4px 16px -2px rgba(15, 23, 42, 0.06), 0 1px 3px 0 rgba(15, 23, 42, 0.04)",
-        "glass-sm": "0 1px 3px 0 rgba(15, 23, 42, 0.04)",
-        "glass-hover": "0 4px 12px -2px rgba(15, 23, 42, 0.08)",
-        card: "0 1px 2px 0 rgba(15, 23, 42, 0.03)",
+        "2xs": "0 1px 0 0 rgba(15, 23, 42, 0.03)",
+        xs: "0 1px 1px 0 rgba(15, 23, 42, 0.04)",
+        sm: "0 1px 2px 0 rgba(15, 23, 42, 0.06)",
+        glass: "0 2px 6px -1px rgba(15, 23, 42, 0.08)",
+        "glass-sm": "0 1px 1px 0 rgba(15, 23, 42, 0.04)",
+        "glass-hover": "0 2px 6px -1px rgba(15, 23, 42, 0.10)",
+        card: "0 1px 0 0 rgba(15, 23, 42, 0.03)",
       },
       fontFamily: {
         sans: [
-          "Inter",
-          "Geist Sans",
-          "-apple-system",
-          "BlinkMacSystemFont",
+          "Segoe UI Variable Text",
           "Segoe UI",
+          "system-ui",
+          "-apple-system",
+          "Inter",
           "Roboto",
           "sans-serif",
         ],
         mono: [
-          "JetBrains Mono",
-          "Geist Mono",
+          "Cascadia Mono",
+          "Consolas",
           "SFMono-Regular",
           "Menlo",
           "Monaco",
-          "Consolas",
           "monospace",
         ],
       },

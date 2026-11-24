@@ -1,17 +1,19 @@
 import React, { useMemo } from 'react';
-import { OverviewMetrics, PerformanceTrendPoint } from '../../types';
+import { ActiveModelInfo, OverviewMetrics, PerformanceTrendPoint } from '../../types';
 import { Zap, Gauge, Cpu, ArrowDown, ArrowUp } from 'lucide-react';
 
 interface CompactMetricsStripProps {
   metrics: OverviewMetrics;
   historicalPoints?: PerformanceTrendPoint[];
   dataSourceLabel?: string;
+  activeModel?: ActiveModelInfo;
 }
 
 export const CompactMetricsStrip: React.FC<CompactMetricsStripProps> = ({
   metrics,
   historicalPoints = [],
   dataSourceLabel,
+  activeModel,
 }) => {
   const hasHistory = historicalPoints.length >= 2;
 
@@ -66,12 +68,13 @@ export const CompactMetricsStrip: React.FC<CompactMetricsStripProps> = ({
   return (
     <div className="flex flex-col gap-2 select-none">
       {/* Provenance Header */}
-      <div className="flex items-center justify-between px-0.5 text-[11px] text-[#647187]">
-        <span className="uppercase tracking-wider font-semibold text-[#647187]">
-          Inference Summary · Active Runtime (Qwen3-1.7B · Q4_K_M)
+      <div className="flex items-center justify-between gap-3 px-0.5 text-[11px] text-[#647187]">
+        <span className="font-semibold text-[#647187] truncate">
+          Inference Summary
+          {activeModel ? ` · Active Runtime (${activeModel.name})` : ''}
         </span>
         {dataSourceLabel && (
-          <span className="flex items-center gap-1.5 text-[#647187] font-mono text-[11px]">
+          <span className="flex items-center gap-1.5 text-[#647187] font-mono text-[11px] shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-[#7562E8]" />
             <span>{dataSourceLabel}</span>
           </span>

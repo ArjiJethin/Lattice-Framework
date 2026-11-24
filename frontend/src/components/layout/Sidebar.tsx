@@ -3,6 +3,7 @@ import {
   Home,
   Layers,
   FlaskConical,
+  MessageSquare,
   Settings,
   Box,
 } from 'lucide-react';
@@ -13,6 +14,7 @@ export type NavItemKey =
   | 'model-lab'
   | 'optimization-lab'
   | 'experiments'
+  | 'chat'
   | 'settings';
 
 interface SidebarProps {
@@ -47,6 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       { key: 'model-lab', label: 'Model Lab', icon: Layers },
       { key: 'optimization-lab', label: 'Optimization Lab', icon: OptimizationNetworkIcon },
       { key: 'experiments', label: 'Experiments', icon: FlaskConical },
+      { key: 'chat', label: 'Model Chat', icon: MessageSquare },
       { key: 'settings', label: 'Settings', icon: Settings },
     ];
 

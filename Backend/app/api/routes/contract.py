@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc, select
@@ -34,6 +34,195 @@ from app.schemas.contract import (
 )
 
 router = APIRouter(tags=["Frontend Contract"])
+
+
+def _mean_metric(run: BenchmarkRun, name: str) -> float | None:
+    """Read a metric mean out of a run aggregate summary, if it was measured."""
+    metrics = (run.aggregate_summary or {}).get("metrics") or {}
+    entry = metrics.get(name) or {}
+    value = entry.get("mean")
+    if value is None:
+        return None
+    try:
+        return round(float(value), 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def _run_latency_ms(run: BenchmarkRun) -> float | None:
+    return _mean_metric(run, "latency_ms") or _mean_metric(run, "ttft_ms")
+
+
+def _run_throughput_tps(run: BenchmarkRun) -> float | None:
+    return _mean_metric(run, "decode_throughput_tps") or _mean_metric(
+        run, "output_throughput_tps"
+    )
+
+
+def _run_memory_gb(run: BenchmarkRun) -> float | None:
+    rss_mb = _mean_metric(run, "peak_process_rss_mb")
+    return round(rss_mb / 1024.0, 2) if rss_mb is not None else None
+
+
+def _run_quality_score(run: BenchmarkRun) -> float | None:
+    quality = run.quality_result or {}
+    score = quality.get("score")
+    if quality.get("status") != "available" or score is None:
+        return None
+    try:
+        return round(float(score) * 100.0, 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pct_change(current: float | None, previous: float | None) -> float | None:
+    if current is None or previous is None or previous == 0:
+        return None
+    return round((current - previous) / previous * 100.0, 1)
+
+
+QUANTIZATION_LADDER = ("Q2_K", "Q3_K_M", "Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0")
+
+# Overview foundation platforms, clockwise around the central optimizer node.
+# Mirrors NODE_MOUNTS in Frontend/src/components/lattice3d/Foundation.tsx so each
+# candidate stands on its own platform instead of floating in orbit.
+MOUNT_SLOTS: tuple[tuple[float, float, float], ...] = (
+    (-3.4, -1.8, 0.28),
+    (-3.8, 1.8, 0.14),
+    (1.2, 2.4, 0.14),
+    (4.4, 1.4, 0.24),
+    (3.8, -2.2, 0.34),
+)
+CANDIDATE_NODE_SIZE = 0.95
+
+
+def _mount_position(slot: int) -> list[float]:
+    """World position of a candidate standing on one of the foundation platforms."""
+    if 0 <= slot < len(MOUNT_SLOTS):
+        x, z, mount_height = MOUNT_SLOTS[slot]
+        # Platform cap top + pedestal socket clearance + half the crystal height.
+        y = 0.185 + mount_height + 0.04 + 0.165 + CANDIDATE_NODE_SIZE / 2.0
+        return [x, round(y, 2), z]
+    # More configurations than platforms: orbit the extras outside the deck.
+    extra = slot - len(MOUNT_SLOTS)
+    ring = 4.6 + (extra // 8) * 1.0
+    angle = (extra % 8) * (math.pi / 4.0)
+    return [round(ring * math.cos(angle), 2), 1.2, round(ring * math.sin(angle), 2)]
+
+
+def _unprofiled_variant(
+    config: Configuration, index: int, quantization: str
+) -> ConfigurationCandidate:
+    """A candidate quantization of a registered model that is not measured yet."""
+    model_name = config.model_id or config.name
+
+    return ConfigurationCandidate(
+        id=f"{config.id}:{quantization.lower()}",
+        name=f"{model_name}-{quantization}",
+        modelName=model_name,
+        quantization=quantization,
+        description="Candidate quantization profile — not benchmarked yet",
+        status="unprofiled",
+        nodeRole="candidate",
+        memoryUsageGb=None,
+        memoryBudgetGb=4.0,
+        inferenceLatencyMs=None,
+        latencyConstraintMs=250.0,
+        qualityScore=None,
+        qualityThreshold=80.0,
+        generationSpeedToks=None,
+        constraints=CandidateConstraints(),
+        position3D=_mount_position(index - 1),
+        platformIndex=index,
+        badgeText="Unprofiled",
+        subLabel=None,
+        measuredAt=None,
+        provenance="live_backend",
+    )
+
+
+def _candidate_from_configuration(
+    db: Session,
+    config: Configuration,
+    index: int,
+    *,
+    is_selected: bool,
+    memory_budget_gb: float = 4.0,
+    latency_budget_ms: float | None = None,
+    quality_threshold: float | None = None,
+) -> ConfigurationCandidate:
+    """Map a registered configuration plus its newest measured run into a candidate.
+
+    Every measured value comes from the run aggregate summary; constraints are only
+    asserted when a real measurement exists to compare against.
+    """
+    latest_run = _latest_measured_run(db, config.id)
+    memory_gb = _run_memory_gb(latest_run) if latest_run else None
+    latency_ms = _run_latency_ms(latest_run) if latest_run else None
+    throughput_tps = _run_throughput_tps(latest_run) if latest_run else None
+    quality = _run_quality_score(latest_run) if latest_run else None
+    measured_at = (
+        utc_iso(latest_run.finished_at or latest_run.created_at) if latest_run else None
+    )
+
+    return ConfigurationCandidate(
+        id=config.id,
+        name=config.name,
+        modelName=config.model_id or "Qwen2.5-0.5B",
+        quantization=config.quantization.upper(),
+        description=config.description
+        or f"{config.quantization.upper()} candidate configuration",
+        status="selected" if is_selected else "feasible",
+        nodeRole="optimizer" if is_selected else "candidate",
+        memoryUsageGb=memory_gb,
+        memoryBudgetGb=memory_budget_gb,
+        inferenceLatencyMs=latency_ms,
+        latencyConstraintMs=(
+            latency_budget_ms if latency_budget_ms is not None else 250.0
+        ),
+        qualityScore=quality,
+        qualityThreshold=(
+            quality_threshold if quality_threshold is not None else 80.0
+        ),
+        generationSpeedToks=throughput_tps,
+        constraints=CandidateConstraints(
+            withinMemoryBudget=(
+                None if memory_gb is None else memory_gb <= memory_budget_gb
+            ),
+            # Unknown unless the caller supplies an explicit latency budget.
+            meetsLatencyConstraint=(
+                None
+                if latency_ms is None or latency_budget_ms is None
+                else latency_ms <= latency_budget_ms
+            ),
+            qualityThresholdSatisfied=(
+                None
+                if quality is None or quality_threshold is None
+                else quality >= quality_threshold
+            ),
+        ),
+        position3D=[0.0, 2.2, 0.0] if is_selected else _mount_position(index - 1),
+        platformIndex=index,
+        badgeText="Selected" if is_selected else None,
+        subLabel="Active optimal profile" if is_selected else None,
+        measuredAt=measured_at,
+        provenance="live_backend",
+    )
+
+
+def _latest_measured_run(db: Session, configuration_id: str) -> BenchmarkRun | None:
+    """Newest fully completed run, falling back to a partial run with measurements."""
+    for statuses in (["completed"], ["partial"]):
+        run = db.scalars(
+            select(BenchmarkRun)
+            .where(BenchmarkRun.configuration_id == configuration_id)
+            .where(BenchmarkRun.status.in_(statuses))
+            .order_by(desc(BenchmarkRun.created_at))
+            .limit(1)
+        ).first()
+        if run is not None:
+            return run
+    return None
 
 DEFAULT_CANDIDATES = [
     {
@@ -223,46 +412,27 @@ def get_profiles(
 ) -> ProfilesResponse:
     configs = list(db.scalars(select(Configuration).order_by(desc(Configuration.created_at)).limit(20)).all())
 
-    candidates: list[ConfigurationCandidate] = []
+    candidates: list[ConfigurationCandidate] = [
+        _candidate_from_configuration(db, config, index, is_selected=(index == 0))
+        for index, config in enumerate(configs)
+    ]
 
-    # Generate 3D layout for registered configs
-    angles = [0.0, 0.78, 1.57, 2.35, 3.14, 3.92, 4.71, 5.49]
-    for i, c in enumerate(configs):
-        theta = angles[i % len(angles)]
-        radius = 2.5 + (i // len(angles)) * 1.0
-        x = round(radius * math.cos(theta), 2)
-        z = round(radius * math.sin(theta), 2)
-        y = 1.2
-        is_selected = (i == 0)
-
-        candidates.append(
-            ConfigurationCandidate(
-                id=c.id,
-                name=c.name,
-                modelName=c.model_id or "Qwen2.5-0.5B",
-                quantization=c.quantization.upper(),
-                description=c.description or f"{c.quantization.upper()} candidate configuration",
-                status="selected" if is_selected else "feasible",
-                nodeRole="optimizer" if is_selected else "candidate",
-                memoryUsageGb=0.5 if "0.5" in (c.name or "") else 2.7,
-                memoryBudgetGb=4.0,
-                inferenceLatencyMs=126.0 if is_selected else 180.0,
-                latencyConstraintMs=250.0,
-                qualityScore=86.2,
-                qualityThreshold=80.0,
-                generationSpeedToks=49.7 if is_selected else 42.0,
-                constraints=CandidateConstraints(
-                    withinMemoryBudget=True,
-                    meetsLatencyConstraint=True,
-                    qualityThresholdSatisfied=True,
-                ),
-                position3D=[0.0, 2.2, 0.0] if is_selected else [x, y, z],
-                platformIndex=i,
-                badgeText="Selected" if is_selected else None,
-                subLabel="Active optimal profile" if is_selected else None,
-                provenance="live_backend",
+    # The active model's other quantization profiles are candidates of the configuration
+    # space; they stay "unprofiled" until a benchmark actually measures them.
+    if configs:
+        active = configs[0]
+        active_model_name = active.model_id or active.name
+        profiled_quantizations = {
+            candidate.quantization
+            for candidate in candidates
+            if candidate.modelName == active_model_name
+        }
+        for quantization in QUANTIZATION_LADDER:
+            if quantization in profiled_quantizations:
+                continue
+            candidates.append(
+                _unprofiled_variant(active, len(candidates), quantization)
             )
-        )
 
     # If no registered configs yet, populate from DEFAULT_CANDIDATES
     if not candidates:
@@ -308,28 +478,74 @@ def get_overview_metrics(
 
     usage_pct = round((vram_used_gb / vram_total_gb) * 100) if vram_total_gb else 15
 
-    # 2. Latest successful inference execution
-    latest_inf = db.scalars(
-        select(InferenceExecution)
-        .where(InferenceExecution.status == "completed")
-        .order_by(desc(InferenceExecution.finished_at))
-        .limit(1)
-    ).first()
+    # 2. Latest measured executions, falling back to measured benchmark runs.
+    executions = list(
+        db.scalars(
+            select(InferenceExecution)
+            .where(InferenceExecution.status == "completed")
+            .order_by(desc(InferenceExecution.finished_at))
+            .limit(2)
+        ).all()
+    )
 
-    latency = round(latest_inf.ttft_ms, 1) if (latest_inf and latest_inf.ttft_ms) else 126.0
-    speed = round(latest_inf.output_throughput_tps, 1) if (latest_inf and latest_inf.output_throughput_tps) else 49.7
-    timestamp = utc_iso(latest_inf.finished_at) if (latest_inf and latest_inf.finished_at) else utc_iso(utcnow())
+    latency: float | None = None
+    speed: float | None = None
+    latency_change: float | None = None
+    speed_change: float | None = None
+    timestamp: str | None = None
+
+    if executions:
+        latest = executions[0]
+        latest_latency = latest.latency_ms or latest.ttft_ms
+        latency = round(latest_latency, 1) if latest_latency else None
+        speed = (
+            round(latest.output_throughput_tps, 1)
+            if latest.output_throughput_tps
+            else None
+        )
+        timestamp = utc_iso(latest.finished_at or latest.created_at)
+        if len(executions) > 1:
+            previous = executions[1]
+            latency_change = _pct_change(
+                latency, previous.latency_ms or previous.ttft_ms
+            )
+            speed_change = _pct_change(speed, previous.output_throughput_tps)
+
+    if latency is None or speed is None:
+        runs = list(
+            db.scalars(
+                select(BenchmarkRun)
+                .where(BenchmarkRun.status.in_(["completed", "partial"]))
+                .order_by(desc(BenchmarkRun.created_at))
+                .limit(2)
+            ).all()
+        )
+        if runs:
+            latest_run = runs[0]
+            if latency is None:
+                latency = _run_latency_ms(latest_run)
+            if speed is None:
+                speed = _run_throughput_tps(latest_run)
+            if timestamp is None:
+                timestamp = utc_iso(latest_run.finished_at or latest_run.created_at)
+            if len(runs) > 1 and (latency_change is None or speed_change is None):
+                latency_change = latency_change or _pct_change(
+                    _run_latency_ms(latest_run), _run_latency_ms(runs[1])
+                )
+                speed_change = speed_change or _pct_change(
+                    _run_throughput_tps(latest_run), _run_throughput_tps(runs[1])
+                )
 
     return OverviewMetricsResponse(
         metrics=OverviewMetricsData(
             inferenceLatencyMs=latency,
-            inferenceLatencyChangePct=-12.5,
+            inferenceLatencyChangePct=latency_change,
             generationSpeedToks=speed,
-            generationSpeedChangePct=8.2,
+            generationSpeedChangePct=speed_change,
             gpuMemoryUsedGb=vram_used_gb,
             gpuMemoryTotalGb=vram_total_gb,
             gpuMemoryUsagePct=usage_pct,
-            lastMeasuredAt=timestamp,
+            lastMeasuredAt=timestamp or utc_iso(utcnow()),
             provenance="live_backend",
         )
     )
@@ -348,63 +564,31 @@ def get_experiments(
         ).all()
     )
 
+    result_by_status = {
+        "completed": "Completed",
+        "partial": "Partial",
+        "queued": "Running",
+        "running": "Running",
+    }
+
     items: list[ExperimentItem] = []
     for r in runs:
+        workload = r.workload_snapshot or {}
         items.append(
             ExperimentItem(
                 id=f"EXP-{r.id[:8].upper()}",
                 model=r.configuration_snapshot.get("model_id", "Qwen2.5-0.5B"),
                 configuration=r.configuration_snapshot.get("quantization", "Q4_K_M").upper(),
-                objective="Constraint-based",
-                result="Completed" if r.status == "completed" else "Failed",
-                latencyMs=126.0,
-                date=r.created_at.strftime("%b %d, %Y") if r.created_at else "Nov 23, 2026",
+                objective=workload.get("name") or "Benchmark run",
+                result=result_by_status.get(r.status, "Failed"),
+                latencyMs=_run_latency_ms(r),
+                date=r.created_at.strftime("%b %d, %Y") if r.created_at else "",
                 candidateId=r.configuration_id,
-                throughputToks=49.7,
-                qualityScore=86.2,
+                throughputToks=_run_throughput_tps(r),
+                qualityScore=_run_quality_score(r),
+                errorMessage=r.error_message,
             )
         )
-
-    # If no runs yet, supply default fixture items so UI displays recent history
-    if not items:
-        items = [
-            ExperimentItem(
-                id="EXP-0042",
-                model="Qwen2.5-0.5B",
-                configuration="Q4_K_M",
-                objective="Constraint-based",
-                result="Completed",
-                latencyMs=126.0,
-                date="Nov 23, 2026",
-                candidateId="cand-optimizer",
-                throughputToks=49.7,
-                qualityScore=86.2,
-            ),
-            ExperimentItem(
-                id="EXP-0041",
-                model="Qwen2.5-0.5B",
-                configuration="Q8_0",
-                objective="Quality prioritization",
-                result="Completed",
-                latencyMs=175.0,
-                date="Nov 23, 2026",
-                candidateId="cand-q80",
-                throughputToks=38.0,
-                qualityScore=92.4,
-            ),
-            ExperimentItem(
-                id="EXP-0040",
-                model="Qwen2.5-0.5B",
-                configuration="Q2_K",
-                objective="Latency optimization",
-                result="Completed",
-                latencyMs=95.0,
-                date="Nov 22, 2026",
-                candidateId="cand-q2k",
-                throughputToks=58.0,
-                qualityScore=81.5,
-            ),
-        ]
 
     return ExperimentsResponse(
         total=len(items),
@@ -415,38 +599,48 @@ def get_experiments(
 @router.get("/trends", response_model=PerformanceTrendsResponse, summary="Performance trends scatter/series")
 def get_trends(
     range_query: str = Query(default="30", alias="range"),
+    container: Container = Depends(get_container),
     db: Session = Depends(get_db),
 ) -> PerformanceTrendsResponse:
-    # Query recent inference executions
-    executions = list(
+    try:
+        limit = max(1, min(int(range_query), 100))
+    except ValueError:
+        limit = 30
+
+    # Real measured benchmark runs, oldest first, one point per run.
+    runs = list(
         db.scalars(
-            select(InferenceExecution)
-            .where(InferenceExecution.status == "completed")
-            .order_by(InferenceExecution.created_at.asc())
-            .limit(30)
+            select(BenchmarkRun)
+            .where(BenchmarkRun.status.in_(["completed", "partial"]))
+            .order_by(desc(BenchmarkRun.created_at))
+            .limit(limit)
         ).all()
     )
+    runs.reverse()
+
+    hardware_snap = container.hardware_service.snapshot()
+    gpu_memory_gb = 0.0
+    devices = (hardware_snap.get("gpu") or {}).get("devices") or []
+    if devices:
+        used_reading = devices[0].get("memory_used_mb") or {}
+        if used_reading.get("value") is not None:
+            gpu_memory_gb = round(float(used_reading["value"]) / 1024.0, 1)
 
     points: list[PerformanceTrendPoint] = []
-    for i, ex in enumerate(executions):
+    for i, run in enumerate(runs):
+        latency = _run_latency_ms(run)
+        throughput = _run_throughput_tps(run)
+        if latency is None or throughput is None:
+            continue
         points.append(
             PerformanceTrendPoint(
-                run=i + 1,
-                latencyMs=round(ex.ttft_ms or 126.0, 1),
-                throughputToks=round(ex.output_throughput_tps or 49.7, 1),
-                gpuMemoryGb=0.5,
-                timestamp=utc_iso(ex.finished_at) if ex.finished_at else None,
+                run=len(points) + 1,
+                latencyMs=latency,
+                throughputToks=throughput,
+                gpuMemoryGb=gpu_memory_gb,
+                timestamp=utc_iso(run.finished_at or run.created_at),
             )
         )
-
-    # Ensure at least 3 points for smooth ECharts visualization
-    if len(points) < 3:
-        points = [
-            PerformanceTrendPoint(run=1, latencyMs=142.0, throughputToks=44.2, gpuMemoryGb=0.5),
-            PerformanceTrendPoint(run=2, latencyMs=130.0, throughputToks=48.0, gpuMemoryGb=0.5),
-            PerformanceTrendPoint(run=3, latencyMs=126.0, throughputToks=49.7, gpuMemoryGb=0.5),
-            PerformanceTrendPoint(run=4, latencyMs=122.0, throughputToks=51.2, gpuMemoryGb=0.5),
-        ]
 
     return PerformanceTrendsResponse(
         data=PerformanceTrendData(
@@ -462,19 +656,84 @@ def submit_optimization_plan(
     payload: OptimizationPlanRequest,
     db: Session = Depends(get_db),
 ) -> OptimizationPlanResponse:
-    selected_id = "cand-optimizer"
-    status_verdict = "optimal"
+    configs = list(
+        db.scalars(select(Configuration).order_by(desc(Configuration.created_at)).limit(20)).all()
+    )
 
-    if payload.memoryBudgetGb < 0.4:
-        status_verdict = "infeasible"
-        rationale = f"No configuration satisfies strict memory budget of {payload.memoryBudgetGb} GB."
-    elif payload.maxLatencyMs < 90:
-        status_verdict = "infeasible"
-        rationale = f"No configuration meets latency target of {payload.maxLatencyMs} ms on current hardware."
+    candidates = [
+        _candidate_from_configuration(
+            db,
+            config,
+            index,
+            is_selected=False,
+            memory_budget_gb=payload.memoryBudgetGb,
+            latency_budget_ms=payload.maxLatencyMs,
+            quality_threshold=payload.minQualityScore,
+        )
+        for index, config in enumerate(configs)
+    ]
+
+    # Only candidates with real measurements can be ranked by the solver.
+    measured = [
+        c
+        for c in candidates
+        if c.inferenceLatencyMs is not None and c.memoryUsageGb is not None
+    ]
+    feasible = [
+        c
+        for c in measured
+        if c.constraints.withinMemoryBudget is not False
+        and c.constraints.meetsLatencyConstraint is not False
+        and c.constraints.qualityThresholdSatisfied is not False
+    ]
+
+    def rank_key(candidate: ConfigurationCandidate) -> float:
+        latency = candidate.inferenceLatencyMs or float("inf")
+        memory = candidate.memoryUsageGb or float("inf")
+        speed = candidate.generationSpeedToks or 0.0
+        quality = candidate.qualityScore or 0.0
+        if payload.objective == "latency":
+            return latency
+        if payload.objective == "memory":
+            return memory
+        if payload.objective == "throughput":
+            return -speed
+        # Balanced: normalise latency and memory against the requested budgets.
+        return (latency / max(payload.maxLatencyMs, 1.0)) + (
+            memory / max(payload.memoryBudgetGb, 0.1)
+        ) - (quality / 100.0)
+
+    rationale_parts = [
+        f"Evaluated {len(measured)} measured configuration(s)",
+        f"against {payload.memoryBudgetGb:g} GB memory and {payload.maxLatencyMs:g} ms latency budgets"
+        f" for the {payload.objective} objective.",
+    ]
+
+    if feasible:
+        winner = min(feasible, key=rank_key)
+        status_verdict: Literal["optimal", "feasible", "infeasible"] = "optimal"
+        rationale_parts.append(
+            f"{winner.name} ({winner.quantization}) is the best fit with "
+            f"{winner.inferenceLatencyMs:g} ms measured latency, "
+            f"{winner.memoryUsageGb:g} GB peak memory"
+            + (
+                f", {winner.generationSpeedToks:g} tok/s"
+                if winner.generationSpeedToks is not None
+                else ""
+            )
+            + (
+                f" and {winner.qualityScore:g}/100 quality."
+                if winner.qualityScore is not None
+                else "."
+            )
+        )
     else:
-        rationale = (
-            f"Q4_K_M achieves 86.2 quality score within {payload.memoryBudgetGb} GB memory budget "
-            f"and 126 ms inference latency ({payload.objective} objective)."
+        winner = min(measured, key=rank_key) if measured else None
+        status_verdict = "infeasible"
+        rationale_parts.append(
+            "No measured configuration satisfies all active constraints."
+            if measured
+            else "No configuration has measured metrics yet; run a benchmark first."
         )
 
     decision_id = f"dec-{uuid.uuid4().hex[:8]}"
@@ -483,8 +742,8 @@ def submit_optimization_plan(
     return OptimizationPlanResponse(
         decisionId=decision_id,
         status=status_verdict,
-        selectedCandidateId=selected_id,
-        rationale=rationale,
-        candidateProfiles=[],
+        selectedCandidateId=winner.id if winner else "",
+        rationale=" ".join(rationale_parts),
+        candidateProfiles=candidates,
         timestamp=timestamp,
     )

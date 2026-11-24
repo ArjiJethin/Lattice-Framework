@@ -246,6 +246,35 @@ class LlamaCppAdapter(BaseRuntimeAdapter):
         return self._model is not None
 
     # -- generation --------------------------------------------------------
+    @staticmethod
+    def _chat_messages(request: GenerationRequest) -> list[dict[str, str]] | None:
+        """Chat turns to send to the model's chat template, if any."""
+        messages: list[dict[str, str]] = []
+        if request.system_prompt:
+            messages.append({"role": "system", "content": request.system_prompt})
+        if request.messages:
+            messages.extend(
+                {
+                    "role": str(message.get("role") or "user"),
+                    "content": str(message.get("content") or ""),
+                }
+                for message in request.messages
+                if str(message.get("content") or "").strip()
+            )
+        if not any(message["role"] == "user" for message in messages):
+            messages.append({"role": "user", "content": request.prompt})
+        return messages or None
+
+    @staticmethod
+    def _supports_chat_template(model: Any) -> bool:
+        """True when the GGUF ships a chat template and the build can apply it."""
+        if not callable(getattr(model, "create_chat_completion", None)):
+            return False
+        metadata = getattr(model, "metadata", None)
+        if not isinstance(metadata, dict):
+            return False
+        return bool(metadata.get("tokenizer.chat_template"))
+
     def generate(self, request: GenerationRequest) -> GenerationResult:  # pragma: no cover
         model = self._model
         if model is None:
@@ -255,15 +284,24 @@ class LlamaCppAdapter(BaseRuntimeAdapter):
             "temperature": request.temperature,
             "top_p": request.top_p,
             "top_k": request.top_k,
+            "repeat_penalty": request.repeat_penalty,
             "stop": list(request.stop),
             "stream": True,
-            "echo": False,
         }
         if request.seed is not None:
             parameters["seed"] = request.seed
         prompt = request.prompt
         if request.system_prompt:
             prompt = f"{request.system_prompt}\n\n{prompt}"
+        messages = self._chat_messages(request)
+        # GGUF instruct models carry a chat template; using it produces a normal
+        # assistant reply instead of continuing the prompt as raw text.
+        chat_mode = bool(messages) and self._supports_chat_template(model)
+        if chat_mode:
+            prompt_for_count = "\n".join(message["content"] for message in messages)
+        else:
+            parameters["echo"] = False
+            prompt_for_count = prompt
         started = monotonic()
         deadline = started + max(0.001, request.timeout_seconds)
         first_token_ms: float | None = None
@@ -271,7 +309,10 @@ class LlamaCppAdapter(BaseRuntimeAdapter):
         usage: dict[str, Any] = {}
         finish_reason: str | None = None
         try:
-            stream = model(prompt, **parameters)
+            if chat_mode:
+                stream = model.create_chat_completion(messages=messages, **parameters)
+            else:
+                stream = model(prompt, **parameters)
             for chunk in stream:
                 now = monotonic()
                 if now > deadline:
@@ -283,11 +324,16 @@ class LlamaCppAdapter(BaseRuntimeAdapter):
                     )
                 choices = chunk.get("choices") or []
                 if choices:
-                    text = choices[0].get("text") or ""
+                    choice = choices[0]
+                    if chat_mode:
+                        delta = choice.get("delta") or {}
+                        text = delta.get("content") or ""
+                    else:
+                        text = choice.get("text") or ""
                     if text and first_token_ms is None:
                         first_token_ms = max(0.001, (now - started) * 1000.0)
                     chunks.append(text)
-                    finish_reason = choices[0].get("finish_reason") or finish_reason
+                    finish_reason = choice.get("finish_reason") or finish_reason
                 if "usage" in chunk and chunk["usage"]:
                     usage = chunk["usage"]
         except (InferenceTimeout, InferenceFailure):
@@ -305,7 +351,7 @@ class LlamaCppAdapter(BaseRuntimeAdapter):
             source = "runtime:usage"
         else:
             try:
-                prompt_tokens = model.tokenize(prompt.encode("utf-8"))
+                prompt_tokens = model.tokenize(prompt_for_count.encode("utf-8"))
                 completion_tokens = model.tokenize(text.encode("utf-8"))
                 input_tokens = len(prompt_tokens)
                 output_tokens = len(completion_tokens)
@@ -322,6 +368,7 @@ class LlamaCppAdapter(BaseRuntimeAdapter):
             runtime_metadata={
                 "adapter_id": self.adapter_id,
                 "is_test_runtime": False,
+                "prompt_mode": "chat_template" if chat_mode else "completion",
                 "effective_execution_mode": (
                     ExecutionMode.HYBRID.value
                     if (self._configuration and (self._configuration.gpu_layers or 0) > 0)

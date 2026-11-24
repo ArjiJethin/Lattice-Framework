@@ -120,12 +120,19 @@ class WorkloadService:
         if content_changed and "version" not in fields:
             workload.version += 1
         workload.updated_at = utcnow()
-        self._add_revision(workload)
+        # Revision rows are keyed by (workload_id, version).  An edit that leaves
+        # the research snapshot untouched (description, enabled, metadata) must
+        # not try to insert a second row for the version that already exists.
         try:
+            if content_changed or "version" in fields:
+                self._add_revision(workload)
             self.session.commit()
         except IntegrityError as exc:
             self.session.rollback()
-            raise ConflictError("a workload with this name already exists") from exc
+            raise ConflictError(
+                "workload update conflicts with existing data "
+                "(duplicate name or an already-recorded revision)"
+            ) from exc
         return self.to_read(workload)
 
     def delete(self, workload_id: str) -> DeleteResponse:

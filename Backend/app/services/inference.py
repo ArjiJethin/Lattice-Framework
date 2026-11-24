@@ -169,7 +169,14 @@ class InferenceService:
             )
             repo.create(self.session, execution)
             job.resource_id = execution.id
-            self.register_prompt(execution.id, payload.prompt, payload.system_prompt)
+            self.register_prompt(
+                execution.id,
+                payload.prompt,
+                payload.system_prompt,
+                [message.model_dump() for message in payload.messages]
+                if payload.messages
+                else None,
+            )
             self.session.commit()
         except IntegrityError as exc:
             self.session.rollback()
@@ -178,6 +185,7 @@ class InferenceService:
                 raise
             _PROMPTS.pop(execution.id, None)
             _SYSTEM_PROMPTS.pop(execution.id, None)
+            _MESSAGES.pop(execution.id, None)
             replay = self._replay(request_id, payload, linked_decision_id)
             if replay is None:
                 raise
@@ -192,6 +200,7 @@ class InferenceService:
             self.job_manager.release()
             _PROMPTS.pop(execution.id, None)
             _SYSTEM_PROMPTS.pop(execution.id, None)
+            _MESSAGES.pop(execution.id, None)
             with session_scope(self.session_factory) as cleanup:
                 from app.db.models import Job
 
@@ -335,6 +344,7 @@ class InferenceService:
                     "persisted by default, so submissions must be executed in the same process"
                 )
             system_prompt = _SYSTEM_PROMPTS.pop(execution_id, None)
+            messages = _MESSAGES.pop(execution_id, None)
 
             lock_context = self.runtime_locks.acquire(
                 f"runtime:{adapter.adapter_id}", timeout_seconds=60
@@ -347,6 +357,7 @@ class InferenceService:
                 prompt,
                 generation,
                 system_prompt=system_prompt,
+                messages=messages,
                 timeout_seconds=timeout,
                 stream=True,
             )
@@ -445,6 +456,7 @@ class InferenceService:
         finally:
             _PROMPTS.pop(execution_id, None)
             _SYSTEM_PROMPTS.pop(execution_id, None)
+            _MESSAGES.pop(execution_id, None)
             if lock_context is not None:
                 try:
                     lock_context.__exit__(None, None, None)
@@ -481,11 +493,19 @@ class InferenceService:
         return [InferenceRead.model_validate(item) for item in items], total
 
     # ------------------------------------------------------------------
-    def register_prompt(self, execution_id: str, prompt: str, system_prompt: str | None) -> None:
+    def register_prompt(
+        self,
+        execution_id: str,
+        prompt: str,
+        system_prompt: str | None,
+        messages: list[dict[str, str]] | None = None,
+    ) -> None:
         """Keep the prompt in process memory only (never the database)."""
         _PROMPTS[execution_id] = prompt
         if system_prompt:
             _SYSTEM_PROMPTS[execution_id] = system_prompt
+        if messages:
+            _MESSAGES[execution_id] = messages
 
     @staticmethod
     def _decision_constraints(session: Session, decision_id: str | None) -> list[dict[str, Any]]:
@@ -600,6 +620,7 @@ class InferenceService:
 # the worker thread needs them.  Entries are removed when the job finishes.
 _PROMPTS: dict[str, str] = {}
 _SYSTEM_PROMPTS: dict[str, str] = {}
+_MESSAGES: dict[str, list[dict[str, str]]] = {}
 
 
 __all__ = ["InferenceService"]

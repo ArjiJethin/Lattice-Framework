@@ -5,6 +5,7 @@ import { OverviewPage } from './pages/OverviewPage';
 import { ModelLabPage } from './pages/ModelLabPage';
 import { OptimizationLabPage } from './pages/OptimizationLabPage';
 import { ExperimentsPage } from './pages/ExperimentsPage';
+import { ChatPage } from './pages/ChatPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { CandidateDetailsModal } from './components/overview/CandidateDetailsModal';
@@ -18,12 +19,15 @@ export default function App(): React.ReactElement {
   const overviewData = useOverviewData();
   const modelLibrary = useModelLibrary();
 
+  // The loaded model always comes from the backend; the model library is only a
+  // catalogue of available variants, so it must not override what is actually running.
   const currentActiveModel = useMemo(() => {
+    const live = overviewData.activeModel;
     return {
-      name: modelLibrary.selectedModel?.name || overviewData.activeModel.name,
-      quantization: modelLibrary.selectedVariant?.name || overviewData.activeModel.quantization,
-      runtime: overviewData.activeModel.runtime,
-      status: overviewData.activeModel.status,
+      name: live.name || modelLibrary.selectedModel?.name || 'No model loaded',
+      quantization: live.quantization || modelLibrary.selectedVariant?.name || '—',
+      runtime: live.runtime || '—',
+      status: live.status,
     };
   }, [modelLibrary.selectedModel, modelLibrary.selectedVariant, overviewData.activeModel]);
 
@@ -83,6 +87,12 @@ export default function App(): React.ReactElement {
             selectedModel={modelLibrary.selectedModel}
             selectedVariant={modelLibrary.selectedVariant}
             summaryStats={modelLibrary.summaryStats}
+            backendState={overviewData.backendState}
+            onRefreshConnection={overviewData.refreshConnection}
+            onNavigate={setActiveNav}
+          />
+        ) : activeNav === 'chat' ? (
+          <ChatPage
             backendState={overviewData.backendState}
             onRefreshConnection={overviewData.refreshConnection}
             onNavigate={setActiveNav}

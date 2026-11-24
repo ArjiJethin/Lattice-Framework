@@ -40,6 +40,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
   const {
     candidates,
     filteredCandidates,
+    activeModel,
     selectedCandidate,
     selectCandidate,
     selectNextCandidate,
@@ -357,13 +358,14 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
       </div>
 
       {/* LOWER ANALYTICAL SECTION */}
-      <div className="px-6 pt-4 pb-2 w-full flex flex-col lg:flex-row gap-4 shrink-0">
+      <div className="px-6 pt-1 pb-2 w-full flex flex-col lg:flex-row gap-4 shrink-0">
         {/* Left: Metrics Strip & Recent Experiments Table */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">
           <CompactMetricsStrip
             metrics={metrics}
             historicalPoints={performanceTrends.points}
             dataSourceLabel={data.dataSourceLabel}
+            activeModel={activeModel}
           />
           <RecentExperimentsTable
             experiments={experiments}

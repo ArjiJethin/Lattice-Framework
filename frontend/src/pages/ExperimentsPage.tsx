@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ExperimentsHeader } from '../components/experiments/ExperimentsHeader';
 import { SelectedModelCard } from '../components/experiments/SelectedModelCard';
 import { ExperimentConfigurationForm } from '../components/experiments/ExperimentConfigurationForm';
@@ -13,11 +13,26 @@ import {
   INITIAL_LIVE_PROGRESS,
   buildExperimentDataset,
 } from '../lib/experiments/experimentsService';
-import { API_BASE_URL } from '../lib/api/client';
+import {
+  cancelBenchmark,
+  ensureConfiguration,
+  ensureWorkload,
+  getBenchmarkRun,
+  submitBenchmark,
+  waitForJob,
+} from '../lib/api/runtime';
 import { ModelFamily, QuantizationVariant, ModelLibrarySummaryStats } from '../types/modelLibrary';
 import { BackendConnectionState } from '../types';
 import { NavItemKey } from '../components/layout/Sidebar';
 import { AlertCircle, X } from 'lucide-react';
+
+const WORKLOAD_PROMPTS: Record<string, string> = {
+  general: 'Explain what a model inference runtime does, in two sentences.',
+  code: 'Write a Python function that returns the nth Fibonacci number iteratively.',
+  chat: 'In one sentence, introduce yourself as a local language model.',
+  summarization: 'Summarize in one sentence: Lattice benchmarks local language models on the machine that runs them.',
+  latency_critical: 'Reply with exactly one short sentence about latency.',
+};
 
 interface ExperimentsPageProps {
   selectedModel: ModelFamily;
@@ -41,6 +56,7 @@ export const ExperimentsPage: React.FC<ExperimentsPageProps> = ({
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [executionNotice, setExecutionNotice] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
 
   const activeQuantization =
     selectedVariant?.name ||
@@ -111,6 +127,11 @@ export const ExperimentsPage: React.FC<ExperimentsPageProps> = ({
   }, []);
 
   const handleCancelExperiment = useCallback(() => {
+    const runId = activeRunIdRef.current;
+    if (runId) {
+      // Best effort: the backend rejects cancelling a run that already finished.
+      cancelBenchmark(runId).catch(() => undefined);
+    }
     setIsRunning(false);
     setProgress((prev) => ({
       ...prev,
@@ -169,42 +190,118 @@ export const ExperimentsPage: React.FC<ExperimentsPageProps> = ({
         ],
       }));
 
-      const res = await fetch(`${API_BASE_URL}/benchmarks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          configuration_id: selectedVariant?.id || selectedModel.defaultVariantId,
-          workload_id: config.workloadType,
-          repetitions: config.numberOfRuns,
-          generation_parameters: config.generationParams,
-          collect_memory: config.metrics.memoryUsagePeak,
-        }),
+      const log = (level: 'info' | 'active' | 'success' | 'warn' | 'error', message: string) =>
+        setProgress((prev) => ({
+          ...prev,
+          logs: [
+            ...prev.logs,
+            {
+              id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              timestamp: new Date().toLocaleTimeString([], { hour12: false }),
+              level,
+              message,
+            },
+          ],
+        }));
+
+      // 1. Resolve real backend resources (the model library IDs are fixtures).
+      const { configuration, created } = await ensureConfiguration(selectedVariant?.id);
+      log(
+        'info',
+        created
+          ? `Created configuration ${configuration.name} (${configuration.id.slice(0, 8)})`
+          : `Using configuration ${configuration.name} (${configuration.id.slice(0, 8)})`
+      );
+
+      // 2. A workload is required; the backend only accepts generation/completion/exact_match.
+      const workloadId = await ensureWorkload({
+        name: `${config.workloadType}-${config.dataset}`,
+        prompt: WORKLOAD_PROMPTS[config.workloadType] ?? WORKLOAD_PROMPTS.general,
+        outputTokens: config.generationParams.maxNewTokens,
+        contextRequirement: 2048,
+      });
+      log('info', `Workload ready (${workloadId.slice(0, 8)})`);
+
+      // 3. Generation parameters must use the backend allowlist keys.
+      const generationParameters: Record<string, number> = {
+        max_tokens: Math.max(1, Math.min(2048, Math.round(config.generationParams.maxNewTokens))),
+        temperature: config.generationParams.temperature,
+        top_p: config.generationParams.topP,
+        top_k: Math.round(config.generationParams.topK),
+      };
+
+      const accepted = await submitBenchmark({
+        configuration_id: configuration.id,
+        workload_id: workloadId,
+        repetitions: Math.max(1, Math.min(20, config.numberOfRuns)),
+        warmup_iterations: 1,
+        generation_parameters: generationParameters,
+        collect_memory: config.metrics.memoryUsagePeak,
       });
 
-      if (!res.ok) {
-        if (res.status === 503) {
-          throw new Error(
-            'Lattice backend reported runtime_unavailable (503): llama-cpp-python adapter is not installed on this host.'
-          );
-        }
-        throw new Error(`Benchmark request failed with HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
+      activeRunIdRef.current = accepted.benchmark_run_id;
       setProgress((prev) => ({
         ...prev,
         status: 'running',
-        statusMessage: `Queued job ${data.job_id || 'active'}`,
-        logs: [
-          ...prev.logs,
-          {
-            id: `log-ok-${Date.now()}`,
-            timestamp: new Date().toLocaleTimeString([], { hour12: false }),
-            level: 'active',
-            message: `Benchmark job queued: ${data.message || data.job_id || 'Executing on runtime'}`,
-          },
-        ],
+        currentRun: 0,
+        progressPct: 0,
+        statusMessage: `Queued job ${accepted.job_id.slice(0, 8)}`,
+        currentLatencyMs: null,
+        generatedTokens: null,
+        currentMemoryGb: null,
+        currentThroughputToks: null,
       }));
+      log('active', `Benchmark job queued: ${accepted.message}`);
+
+      // 4. Poll the job, then read the measured run.
+      const job = await waitForJob(accepted.job_id, {
+        timeoutMs: 900_000,
+        onTick: (snapshot) => {
+          setProgress((prev) => ({
+            ...prev,
+            status: 'running',
+            progressPct:
+              snapshot.progress !== null && snapshot.progress !== undefined
+                ? Math.round(snapshot.progress * 100)
+                : prev.progressPct,
+            statusMessage: snapshot.message || 'Running benchmark repetitions…',
+          }));
+        },
+      });
+
+      if (job.status !== 'completed') {
+        throw new Error(job.error_message || `Benchmark job ended with status "${job.status}".`);
+      }
+
+      const run = await getBenchmarkRun(accepted.benchmark_run_id);
+      const byName = new Map(run.metric_summaries.map((item) => [item.metric_name, item]));
+      const latency = byName.get('latency_ms')?.mean ?? null;
+      const throughput = byName.get('decode_throughput_tps')?.mean ?? null;
+      const rssMb = byName.get('peak_process_rss_mb')?.mean ?? null;
+      const tokens = byName.get('output_tokens')?.mean ?? null;
+
+      setProgress((prev) => ({
+        ...prev,
+        status: 'completed',
+        currentRun: config.numberOfRuns,
+        totalRuns: config.numberOfRuns,
+        progressPct: 100,
+        statusMessage: run.test_only
+          ? 'Completed on the test-only fake runtime'
+          : `${run.completed_repetitions} repetition(s) measured`,
+        estimatedTimeRemaining: null,
+        currentLatencyMs: latency !== null ? Math.round(latency) : null,
+        currentThroughputToks: throughput,
+        currentMemoryGb: rssMb !== null ? rssMb / 1024 : null,
+        generatedTokens:
+          tokens !== null
+            ? { current: Math.round(tokens), total: config.generationParams.maxNewTokens }
+            : prev.generatedTokens,
+      }));
+      log(
+        'success',
+        `Run completed — ${latency !== null ? `${latency.toFixed(0)} ms` : 'no latency'}, ${throughput !== null ? `${throughput.toFixed(1)} tok/s` : 'no throughput'}, ${run.failed_repetitions} failed repetition(s)`
+      );
     } catch (err: unknown) {
       const errMessage =
         err instanceof Error
@@ -228,6 +325,7 @@ export const ExperimentsPage: React.FC<ExperimentsPageProps> = ({
       }));
     } finally {
       setIsRunning(false);
+      activeRunIdRef.current = null;
     }
   }, [backendState, selectedVariant, selectedModel, config, activeQuantization]);
 
@@ -299,6 +397,7 @@ export const ExperimentsPage: React.FC<ExperimentsPageProps> = ({
         onSelectRun={(id) => setSelectedRunId(id)}
         selectedQuantizationName={activeQuantization}
       />
+
     </div>
   );
 };
