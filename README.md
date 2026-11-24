@@ -305,6 +305,18 @@ The 3D canvases use hardware-accelerated WebGL through Three.js. Ensure hardware
 
 ---
 
+### For CMD
+cd /d C:\Users\aluru\OneDrive\Desktop\Projects\Lattice-Framework\Backend
+set "LATTICE_MODEL_ROOTS=..\models"
+set "LATTICE_RUNTIME_ADAPTER=llamacpp"
+.\.venv\Scripts\uvicorn.exe app.main:app --host 127.0.0.1 --port 8000
+### For PowerShell
+cd C:\Users\aluru\OneDrive\Desktop\Projects\Lattice-Framework\Backend
+.\.venv\Scripts\Activate.ps1
+$env:LATTICE_MODEL_ROOTS = "..\models"
+$env:LATTICE_RUNTIME_ADAPTER = "llamacpp"
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
