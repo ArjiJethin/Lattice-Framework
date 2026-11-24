@@ -115,6 +115,19 @@ class HardwareSnapshot:
     sampling: dict[str, Any]
     schema_version: str = HARDWARE_SCHEMA_VERSION
 
+    @staticmethod
+    def _serialize_gpu(gpu: dict[str, Any]) -> dict[str, Any]:
+        """Recursively convert HardwareReading objects to plain dicts for JSON storage."""
+        def _convert(obj: Any) -> Any:
+            if isinstance(obj, HardwareReading):
+                return obj.to_dict()
+            if isinstance(obj, dict):
+                return {k: _convert(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_convert(item) for item in obj]
+            return obj
+        return _convert(gpu)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
@@ -123,7 +136,7 @@ class HardwareSnapshot:
             "system": {key: reading.to_dict() for key, reading in self.system.items()},
             "cpu": {key: reading.to_dict() for key, reading in self.cpu.items()},
             "memory": {key: reading.to_dict() for key, reading in self.memory.items()},
-            "gpu": self.gpu,
+            "gpu": self._serialize_gpu(self.gpu),
             "runtime": self.runtime,
             "sampling": self.sampling,
         }

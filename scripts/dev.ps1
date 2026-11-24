@@ -23,7 +23,7 @@ param(
 
 $RootDir = Split-Path -Parent $PSScriptRoot
 $FrontendDir = Join-Path $RootDir "frontend"
-$BackendDir = Join-Path $RootDir "backend"
+$BackendDir = Join-Path $RootDir "Backend"
 $VenvPython = Join-Path $BackendDir ".venv\Scripts\python.exe"
 
 function Start-Frontend {
