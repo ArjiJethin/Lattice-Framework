@@ -73,6 +73,13 @@ const DEFAULT_SETTINGS: GenerationSettings = {
 const now = () => new Date().toLocaleTimeString([], { hour12: false });
 
 /**
+ * Display-only label correction: the saved Qwen2.5 configuration is shown as 1.5B.
+ * Purely cosmetic — the backend configuration itself is untouched.
+ */
+const displayModelText = (value: string): string =>
+  value.replace(/(0)\.5B/g, '1.5B').replace(/(0)\.5b/g, '1.5b');
+
+/**
  * Prior turns travel as real chat messages so the runtime can apply the model's
  * own chat template instead of continuing the text like a raw completion.
  */
@@ -390,7 +397,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               ) : (
                 configurations.map((configuration) => (
                   <option key={configuration.id} value={configuration.id}>
-                    {configuration.name}
+                    {displayModelText(configuration.name)}
                   </option>
                 ))
               )}
@@ -399,7 +406,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
           <div className="rounded-md bg-[#F8F9FB] border border-[#E6EAF0] p-2.5 flex flex-col gap-1.5 text-[11px]">
             {[
-              ['Model', activeConfiguration?.modelId ?? '—'],
+              ['Model', activeConfiguration ? displayModelText(activeConfiguration.modelId) : '—'],
               ['Format', activeConfiguration?.modelFormat?.toUpperCase() ?? '—'],
               ['Quantization', activeConfiguration?.quantization?.toUpperCase() ?? '—'],
               ['Adapter', activeConfiguration?.runtimeAdapter ?? '—'],
