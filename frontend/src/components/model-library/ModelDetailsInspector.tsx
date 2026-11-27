@@ -50,11 +50,9 @@ export const ModelDetailsInspector: React.FC<ModelDetailsInspectorProps> = ({
   };
 
   const statusTone =
-    model.status === 'Installed'
+    model.status === 'Ready' || model.status === 'Installed'
       ? 'success'
-      : model.status === 'Ready'
-        ? 'info'
-        : 'neutral';
+      : 'neutral';
 
   return (
     <div className="w-full h-full flex flex-col justify-between p-4 rounded-lg bg-white border border-[#D9DEE7] shadow-2xs select-none overflow-hidden">

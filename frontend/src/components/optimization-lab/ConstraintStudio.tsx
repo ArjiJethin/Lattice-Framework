@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Play, AlertCircle, RotateCcw } from 'lucide-react';
 import {
   OptimizationConstraints,
+  OptimizationProgress,
   WorkloadType,
   OptimizationObjectiveType,
 } from '../../types/optimizationLab';
@@ -25,6 +26,8 @@ interface ConstraintStudioProps {
   onResetConstraints: () => void;
   onRunOptimization: () => void;
   isLoading: boolean;
+  progress?: OptimizationProgress | null;
+  lastSolveDurationMs?: number;
   hasUnsolvedChanges?: boolean;
   error?: string | null;
 }
@@ -35,6 +38,8 @@ export const ConstraintStudio: React.FC<ConstraintStudioProps> = ({
   onResetConstraints,
   onRunOptimization,
   isLoading,
+  progress,
+  lastSolveDurationMs,
   hasUnsolvedChanges = false,
   error,
 }) => {
@@ -184,7 +189,13 @@ export const ConstraintStudio: React.FC<ConstraintStudioProps> = ({
         <div className="flex flex-col justify-between gap-1.5">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-medium text-[#647187]">Solver Execution</span>
-            <span className="text-[10.5px] font-mono text-[#0D8A58]">Pareto v1.0</span>
+            <span className="text-[10.5px] font-mono text-[#0D8A58]">
+              {isLoading && progress
+                ? `${progress.percent}%`
+                : lastSolveDurationMs && lastSolveDurationMs >= 1000
+                  ? `${(lastSolveDurationMs / 1000).toFixed(2)}s`
+                  : 'Pareto v1.0'}
+            </span>
           </div>
           <Button
             variant="primary"
@@ -194,10 +205,14 @@ export const ConstraintStudio: React.FC<ConstraintStudioProps> = ({
             leftIcon={<Play className="w-3.5 h-3.5 fill-current" />}
             className="w-full h-8"
           >
-            {isLoading ? 'Solving...' : 'Run Optimization'}
+            {isLoading && progress ? `Solving (${progress.percent}%)...` : 'Run Optimization'}
           </Button>
           <span className="text-[10.5px] text-[#647187] truncate text-center leading-tight">
-            {hasUnsolvedChanges ? 'Unsaved constraint changes' : 'Constraints synchronized'}
+            {isLoading && progress
+              ? `${(progress.elapsedMs / 1000).toFixed(1)}s elapsed`
+              : hasUnsolvedChanges
+                ? 'Modified — Run to update results'
+                : 'Results synchronized'}
           </span>
         </div>
       </div>

@@ -28,7 +28,7 @@ export const ModelFilesTab: React.FC<ModelFilesTabProps> = ({
         <span>Model Package Files ({model.variants.length})</span>
         <span className="flex items-center gap-1 text-[#7562E8] font-mono text-[10.5px]">
           <FolderOpen className="w-3.5 h-3.5 shrink-0" />
-          <span>D:\models</span>
+          <span>models/</span>
         </span>
       </div>
 

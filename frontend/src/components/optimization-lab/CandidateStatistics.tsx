@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   OptimizationCandidate,
   OptimizationConstraints,
+  OptimizationProgress,
   CandidateStatisticsTab,
 } from '../../types/optimizationLab';
 import { ParetoPlotView } from './ParetoPlotView';
@@ -16,6 +17,8 @@ interface CandidateStatisticsProps {
   recommendedCandidateId: string | null;
   onSelectCandidate: (candidate: OptimizationCandidate) => void;
   constraints: OptimizationConstraints;
+  isLoading?: boolean;
+  progress?: OptimizationProgress | null;
 }
 
 export const CandidateStatistics: React.FC<CandidateStatisticsProps> = ({
@@ -24,6 +27,8 @@ export const CandidateStatistics: React.FC<CandidateStatisticsProps> = ({
   recommendedCandidateId,
   onSelectCandidate,
   constraints,
+  isLoading = false,
+  progress,
 }) => {
   const [activeTab, setActiveTab] = useState<CandidateStatisticsTab>('plot');
 
@@ -52,20 +57,30 @@ export const CandidateStatistics: React.FC<CandidateStatisticsProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
-          <StatusBadge tone="success">
-            <span className="font-mono tabular-nums">{counts.feasible}</span> Feasible
-          </StatusBadge>
-          {counts.nearFeasible > 0 && (
-            <StatusBadge tone="warning">
-              <span className="font-mono tabular-nums">{counts.nearFeasible}</span> Near
+          {isLoading ? (
+            <StatusBadge tone="accent" pulse>
+              <span className="font-mono tabular-nums">
+                Solving {progress ? `${progress.percent}%` : '...'}
+              </span>
             </StatusBadge>
+          ) : (
+            <>
+              <StatusBadge tone="success">
+                <span className="font-mono tabular-nums">{counts.feasible}</span> Feasible
+              </StatusBadge>
+              {counts.nearFeasible > 0 && (
+                <StatusBadge tone="warning">
+                  <span className="font-mono tabular-nums">{counts.nearFeasible}</span> Near
+                </StatusBadge>
+              )}
+              <StatusBadge tone="danger">
+                <span className="font-mono tabular-nums">{counts.rejected}</span> Rejected
+              </StatusBadge>
+              <StatusBadge tone="neutral">
+                <span className="font-mono tabular-nums">{counts.unprofiled}</span> Unprofiled
+              </StatusBadge>
+            </>
           )}
-          <StatusBadge tone="danger">
-            <span className="font-mono tabular-nums">{counts.rejected}</span> Rejected
-          </StatusBadge>
-          <StatusBadge tone="neutral">
-            <span className="font-mono tabular-nums">{counts.unprofiled}</span> Unprofiled
-          </StatusBadge>
         </div>
       </div>
 
@@ -108,8 +123,9 @@ export const CandidateStatistics: React.FC<CandidateStatisticsProps> = ({
       </div>
 
       {/* Active View Body */}
-      <div className="w-full">
-        {activeTab === 'plot' ? (
+      <div className="relative w-full">
+        <div className={isLoading ? 'opacity-55 transition-opacity pointer-events-none' : 'transition-opacity'}>
+          {activeTab === 'plot' ? (
           <ParetoPlotView
             candidates={candidates}
             selectedCandidate={selectedCandidate}
@@ -134,6 +150,7 @@ export const CandidateStatistics: React.FC<CandidateStatisticsProps> = ({
             onSelectCandidate={onSelectCandidate}
           />
         )}
+        </div>
       </div>
     </div>
   );

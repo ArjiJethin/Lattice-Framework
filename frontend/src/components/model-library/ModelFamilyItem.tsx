@@ -64,11 +64,9 @@ export const ModelFamilyItem: React.FC<ModelFamilyItemProps> = ({
   const displayArchetype = defaultVar?.archetype || model.archetype;
 
   const statusTone =
-    model.status === 'Installed'
+    model.status === 'Ready' || model.status === 'Installed'
       ? 'success'
-      : model.status === 'Ready'
-        ? 'info'
-        : 'neutral';
+      : 'neutral';
 
   return (
     <button

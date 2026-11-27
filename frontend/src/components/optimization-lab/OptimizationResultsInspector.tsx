@@ -3,6 +3,7 @@ import {
   OptimizationDecisionResult,
   OptimizationCandidate,
   OptimizationConstraints,
+  OptimizationProgress,
 } from '../../types/optimizationLab';
 import { StatusBadge, SegmentedTabs, Button } from '../ui/primitives';
 import {
@@ -14,6 +15,7 @@ import {
   Award,
   ArrowRight,
   Eye,
+  XCircle,
 } from 'lucide-react';
 
 interface OptimizationResultsInspectorProps {
@@ -25,6 +27,7 @@ interface OptimizationResultsInspectorProps {
   constraints: OptimizationConstraints;
   candidates: OptimizationCandidate[];
   isLoading: boolean;
+  progress?: OptimizationProgress | null;
   hasUnsolvedChanges?: boolean;
 }
 
@@ -39,6 +42,7 @@ export const OptimizationResultsInspector: React.FC<OptimizationResultsInspector
   constraints,
   candidates,
   isLoading,
+  progress,
   hasUnsolvedChanges = false,
 }) => {
   const [activeTab, setActiveTab] = useState<InspectorTab>('alternatives');
@@ -79,17 +83,94 @@ export const OptimizationResultsInspector: React.FC<OptimizationResultsInspector
             3. Optimization Decision &amp; Inspector
           </h2>
           <p className="text-[11.5px] text-[#647187] mt-0.5">
-            {decision?.isLiveResponse
-              ? 'Live backend solver decision'
-              : 'Deterministic Pareto evaluation'}
+            {isLoading && progress
+              ? `Solving · ${progress.stage}`
+              : decision?.isLiveResponse
+                ? 'Live backend solver decision'
+                : `Deterministic Pareto evaluation${decision?.solveDurationMs && decision.solveDurationMs >= 1000 ? ` · ${(decision.solveDurationMs / 1000).toFixed(2)}s` : ''}`}
           </p>
         </div>
 
         {renderSolverStatusBadge()}
       </div>
 
+      {isLoading && progress && (() => {
+        const radius = 26;
+        const circumference = 2 * Math.PI * radius;
+        const clampedPct = Math.max(0, Math.min(100, progress.percent));
+        const strokeDashoffset = circumference - (clampedPct / 100) * circumference;
+
+        return (
+          <div className="p-3.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7] flex items-center gap-4">
+            {/* Circular Progress Gauge (matching Experiments LiveProgressSection) */}
+            <div className="relative w-16 h-16 shrink-0 flex items-center justify-center">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 68 68">
+                <circle
+                  cx="34"
+                  cy="34"
+                  r={radius}
+                  className="stroke-[#E2E6EE]"
+                  strokeWidth="5.5"
+                  fill="transparent"
+                />
+                <circle
+                  cx="34"
+                  cy="34"
+                  r={radius}
+                  className="stroke-[#7562E8] transition-all duration-300 ease-out"
+                  strokeWidth="5.5"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={strokeDashoffset}
+                  strokeLinecap="round"
+                  fill="transparent"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center leading-none">
+                <span className="text-[12px] font-mono font-semibold text-[#222938] tabular-nums">
+                  {clampedPct}%
+                </span>
+              </div>
+            </div>
+
+            <div className="flex-1 min-w-0 flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10.5px] font-semibold text-[#647187] uppercase tracking-wider">
+                  Evaluating Candidate Space
+                </span>
+                <span className="text-[11px] font-mono text-[#647187] tabular-nums shrink-0">
+                  {(progress.elapsedMs / 1000).toFixed(1)}s
+                </span>
+              </div>
+              <div className="text-[12.5px] font-semibold text-[#222938] truncate">
+                {progress.stage}
+              </div>
+              <span className="text-[11px] text-[#647187]">
+                Checking hard constraints, Pareto dominance &amp; ranking...
+              </span>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Primary Recommendation Card (when a recommendation exists) */}
-      {recommended && (
+      {!isLoading && decision?.status === 'infeasible' && !recommended && (
+        <div className="rounded-md border border-[#FECACA] bg-[#FEF2F2]/60 p-3.5 flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#DC2626] flex items-center gap-1.5">
+              <XCircle className="w-3.5 h-3.5" />
+              <span>No Feasible Configuration</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold bg-white text-[#DC2626] border border-[#FECACA]">
+              0 / {decision.evaluatedCount ?? currentModelCandidates.length} PASSED
+            </span>
+          </div>
+          <p className="text-[12px] text-[#222938] leading-relaxed">
+            {decision.rationale}
+          </p>
+        </div>
+      )}
+
+      {!isLoading && recommended && (
         <div
           className={`rounded-md border p-3.5 flex flex-col gap-2.5 ${decision?.status === 'optimal'
               ? 'border-[#A7F3D0] bg-[#ECFDF5]/40'
@@ -335,112 +416,130 @@ export const OptimizationResultsInspector: React.FC<OptimizationResultsInspector
             </div>
           )}
 
-          {activeTab === 'constraints' && (
-            <div className="space-y-2 text-[12px]">
-              {/* Memory Audit */}
-              <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7]">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[#647187]">
-                    Memory Budget (≤ {constraints.maxMemoryGb.toFixed(1)} GB)
-                  </span>
-                  <span
-                    className={`font-mono font-semibold tabular-nums ${inspected.audit.withinMemoryBudget === false
-                        ? 'text-[#DC2626]'
-                        : 'text-[#0D8A58]'
-                      }`}
-                  >
-                    {inspected.memoryUsageGb !== null
-                      ? `${inspected.memoryUsageGb.toFixed(1)} GB (${inspected.audit.memoryDeltaGb && inspected.audit.memoryDeltaGb > 0
-                        ? `+${inspected.audit.memoryDeltaGb.toFixed(1)}`
-                        : inspected.audit.memoryDeltaGb?.toFixed(1)
-                      } GB)`
-                      : 'Unmeasured'}
-                  </span>
-                </div>
-                <div className="w-full bg-[#E2E6EE] h-1.5 rounded-sm overflow-hidden">
-                  <div
-                    className={`h-full ${inspected.audit.withinMemoryBudget === false
-                        ? 'bg-[#DC2626]'
-                        : 'bg-[#0D8A58]'
-                      }`}
-                    style={{
-                      width: `${Math.min(100, ((inspected.memoryUsageGb || 0) / 8) * 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
+          {activeTab === 'constraints' && (() => {
+            const memScaleMax = Math.max(constraints.maxMemoryGb * 1.4, inspected.memoryUsageGb || 0, 4);
+            const memThresholdPct = Math.min(100, (constraints.maxMemoryGb / memScaleMax) * 100);
+            const memFillPct = Math.min(100, ((inspected.memoryUsageGb || 0) / memScaleMax) * 100);
 
-              {/* Latency Audit */}
-              <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7]">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[#647187]">
-                    Latency Limit (≤ {constraints.maxLatencyMs} ms)
-                  </span>
-                  <span
-                    className={`font-mono font-semibold tabular-nums ${inspected.audit.meetsLatencyConstraint === false
-                        ? 'text-[#DC2626]'
-                        : 'text-[#0D8A58]'
-                      }`}
-                  >
-                    {inspected.inferenceLatencyMs !== null
-                      ? `${inspected.inferenceLatencyMs} ms (${inspected.audit.latencyDeltaMs && inspected.audit.latencyDeltaMs > 0
-                        ? `+${inspected.audit.latencyDeltaMs}`
-                        : inspected.audit.latencyDeltaMs
-                      } ms)`
-                      : 'Unmeasured'}
-                  </span>
-                </div>
-                <div className="w-full bg-[#E2E6EE] h-1.5 rounded-sm overflow-hidden">
-                  <div
-                    className={`h-full ${inspected.audit.meetsLatencyConstraint === false
-                        ? 'bg-[#DC2626]'
-                        : 'bg-[#0D8A58]'
-                      }`}
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        ((inspected.inferenceLatencyMs || 0) / 500) * 100
-                      )}%`,
-                    }}
-                  />
-                </div>
-              </div>
+            const latScaleMax = Math.max(constraints.maxLatencyMs * 1.4, inspected.inferenceLatencyMs || 0, 200);
+            const latThresholdPct = Math.min(100, (constraints.maxLatencyMs / latScaleMax) * 100);
+            const latFillPct = Math.min(100, ((inspected.inferenceLatencyMs || 0) / latScaleMax) * 100);
 
-              {/* Quality Audit */}
-              <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7]">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[#647187]">
-                    Minimum Quality (≥ {constraints.minQualityScore})
-                  </span>
-                  <span
-                    className={`font-mono font-semibold tabular-nums ${inspected.audit.qualityThresholdSatisfied === false
-                        ? 'text-[#DC2626]'
-                        : 'text-[#0D8A58]'
-                      }`}
-                  >
-                    {inspected.qualityScore !== null
-                      ? `${inspected.qualityScore.toFixed(1)} (${inspected.audit.qualityDeltaScore &&
-                        inspected.audit.qualityDeltaScore >= 0
-                        ? `+${inspected.audit.qualityDeltaScore.toFixed(1)}`
-                        : inspected.audit.qualityDeltaScore?.toFixed(1)
-                      })`
-                      : 'Unmeasured'}
-                  </span>
+            return (
+              <div className="space-y-2 text-[12px]">
+                {/* Memory Audit */}
+                <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7]">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[#647187]">
+                      Memory Budget (≤ {constraints.maxMemoryGb.toFixed(1)} GB)
+                    </span>
+                    <span
+                      className={`font-mono font-semibold tabular-nums ${inspected.audit.withinMemoryBudget === false
+                          ? 'text-[#DC2626]'
+                          : 'text-[#0D8A58]'
+                        }`}
+                    >
+                      {inspected.memoryUsageGb !== null
+                        ? `${inspected.memoryUsageGb.toFixed(1)} GB (${inspected.audit.memoryDeltaGb !== null && inspected.audit.memoryDeltaGb > 0
+                          ? `+${inspected.audit.memoryDeltaGb.toFixed(1)}`
+                          : inspected.audit.memoryDeltaGb?.toFixed(1)
+                        } GB)`
+                        : 'Unmeasured'}
+                    </span>
+                  </div>
+                  <div className="relative w-full bg-[#E2E6EE] h-1.5 rounded-sm overflow-hidden">
+                    <div
+                      className={`h-full ${inspected.audit.withinMemoryBudget === false
+                          ? 'bg-[#DC2626]'
+                          : 'bg-[#0D8A58]'
+                        }`}
+                      style={{ width: `${memFillPct}%` }}
+                    />
+                    <div
+                      className="absolute top-0 bottom-0 w-[2px] bg-[#222938]/50"
+                      style={{ left: `${memThresholdPct}%` }}
+                      title={`Limit: ${constraints.maxMemoryGb.toFixed(1)} GB`}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-[#E2E6EE] h-1.5 rounded-sm overflow-hidden">
-                  <div
-                    className={`h-full ${inspected.audit.qualityThresholdSatisfied === false
-                        ? 'bg-[#DC2626]'
-                        : 'bg-[#0D8A58]'
-                      }`}
-                    style={{
-                      width: `${Math.min(100, inspected.qualityScore || 0)}%`,
-                    }}
-                  />
+
+                {/* Latency Audit */}
+                <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7]">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[#647187]">
+                      Latency Limit (≤ {constraints.maxLatencyMs} ms)
+                    </span>
+                    <span
+                      className={`font-mono font-semibold tabular-nums ${inspected.audit.meetsLatencyConstraint === false
+                          ? 'text-[#DC2626]'
+                          : 'text-[#0D8A58]'
+                        }`}
+                    >
+                      {inspected.inferenceLatencyMs !== null
+                        ? `${inspected.inferenceLatencyMs} ms (${inspected.audit.latencyDeltaMs !== null && inspected.audit.latencyDeltaMs > 0
+                          ? `+${inspected.audit.latencyDeltaMs}`
+                          : inspected.audit.latencyDeltaMs
+                        } ms)`
+                        : 'Unmeasured'}
+                    </span>
+                  </div>
+                  <div className="relative w-full bg-[#E2E6EE] h-1.5 rounded-sm overflow-hidden">
+                    <div
+                      className={`h-full ${inspected.audit.meetsLatencyConstraint === false
+                          ? 'bg-[#DC2626]'
+                          : 'bg-[#0D8A58]'
+                        }`}
+                      style={{ width: `${latFillPct}%` }}
+                    />
+                    <div
+                      className="absolute top-0 bottom-0 w-[2px] bg-[#222938]/50"
+                      style={{ left: `${latThresholdPct}%` }}
+                      title={`Limit: ${constraints.maxLatencyMs} ms`}
+                    />
+                  </div>
+                </div>
+
+                {/* Quality Audit */}
+                <div className="p-2.5 rounded-md bg-[#F8F9FB] border border-[#D9DEE7]">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[#647187]">
+                      Minimum Quality (≥ {constraints.minQualityScore})
+                    </span>
+                    <span
+                      className={`font-mono font-semibold tabular-nums ${inspected.audit.qualityThresholdSatisfied === false
+                          ? 'text-[#DC2626]'
+                          : 'text-[#0D8A58]'
+                        }`}
+                    >
+                      {inspected.qualityScore !== null
+                        ? `${inspected.qualityScore.toFixed(1)} (${inspected.audit.qualityDeltaScore !== null &&
+                          inspected.audit.qualityDeltaScore >= 0
+                          ? `+${inspected.audit.qualityDeltaScore.toFixed(1)}`
+                          : inspected.audit.qualityDeltaScore?.toFixed(1)
+                        })`
+                        : 'Unmeasured'}
+                    </span>
+                  </div>
+                  <div className="relative w-full bg-[#E2E6EE] h-1.5 rounded-sm overflow-hidden">
+                    <div
+                      className={`h-full ${inspected.audit.qualityThresholdSatisfied === false
+                          ? 'bg-[#DC2626]'
+                          : 'bg-[#0D8A58]'
+                        }`}
+                      style={{
+                        width: `${Math.min(100, inspected.qualityScore || 0)}%`,
+                      }}
+                    />
+                    <div
+                      className="absolute top-0 bottom-0 w-[2px] bg-[#222938]/50"
+                      style={{ left: `${Math.min(100, constraints.minQualityScore)}%` }}
+                      title={`Minimum: ${constraints.minQualityScore}`}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {activeTab === 'analysis' && (
             <div className="p-3 rounded-md bg-[#F8F9FB] border border-[#D9DEE7] divide-y divide-[#E6EAF0] text-[12px]">
@@ -448,6 +547,14 @@ export const OptimizationResultsInspector: React.FC<OptimizationResultsInspector
                 <span className="text-[#647187]">Inspected Configuration</span>
                 <span className="font-mono font-semibold text-[#222938]">
                   {inspected.modelName} ({inspected.quantization})
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-[#647187]">Objective Score &amp; Rank</span>
+                <span className="font-mono font-semibold text-[#7562E8] tabular-nums">
+                  {inspected.feasibilityScore !== undefined
+                    ? `${inspected.feasibilityScore.toFixed(1)} / 100${inspected.rank ? ` (#${inspected.rank})` : ''}`
+                    : 'Unranked'}
                 </span>
               </div>
               <div className="flex justify-between py-1.5">
@@ -465,18 +572,40 @@ export const OptimizationResultsInspector: React.FC<OptimizationResultsInspector
                 </span>
               </div>
               <div className="flex justify-between py-1.5">
+                <span className="text-[#647187]">Cold-Start Effective Latency</span>
+                <span className="font-mono font-semibold text-[#222938] tabular-nums">
+                  {inspected.effectiveLatencyMs ? `${inspected.effectiveLatencyMs} ms` : '—'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-[#647187]">Switching Overhead</span>
+                <span className="font-mono font-semibold text-[#222938] tabular-nums">
+                  {activeVariantName &&
+                  inspected.quantization.toUpperCase() === activeVariantName.toUpperCase()
+                    ? '0 ms (resident baseline)'
+                    : `${constraints.switchingOverheadMs ?? 120} ms`}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-[#647187]">Device VRAM Fit</span>
+                <span
+                  className={`font-semibold ${inspected.vramOverflowGb && inspected.vramOverflowGb > 0
+                      ? 'text-[#D97706]'
+                      : 'text-[#0D8A58]'
+                    }`}
+                >
+                  {inspected.vramOverflowGb && inspected.vramOverflowGb > 0
+                    ? `+${inspected.vramOverflowGb.toFixed(1)} GB CPU offload`
+                    : 'Fits in device VRAM'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5">
                 <span className="text-[#647187]">Pareto Frontier Status</span>
                 <span
                   className={`font-semibold ${inspected.isParetoOptimal ? 'text-[#0D8A58]' : 'text-[#647187]'
                     }`}
                 >
                   {inspected.isParetoOptimal ? 'Non-Dominated (Pareto Optimal)' : 'Dominated'}
-                </span>
-              </div>
-              <div className="flex justify-between py-1.5">
-                <span className="text-[#647187]">Switching Overhead Budget</span>
-                <span className="font-mono font-semibold text-[#222938] tabular-nums">
-                  {constraints.switchingOverheadMs ?? 120} ms
                 </span>
               </div>
             </div>

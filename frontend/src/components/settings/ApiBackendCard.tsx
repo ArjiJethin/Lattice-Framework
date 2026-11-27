@@ -173,8 +173,8 @@ export const ApiBackendCard: React.FC<ApiBackendCardProps> = ({
       {testResult && (
         <div
           className={`p-2.5 rounded-md text-[12px] flex items-center justify-between gap-2 border ${testResult.ok
-              ? 'bg-[#ECFDF5] border-[#A7F3D0] text-[#0D8A58]'
-              : 'bg-[#FEF2F2] border-[#FECACA] text-[#DC2626]'
+            ? 'bg-[#ECFDF5] border-[#A7F3D0] text-[#0D8A58]'
+            : 'bg-[#FEF2F2] border-[#FECACA] text-[#DC2626]'
             }`}
         >
           <div className="flex items-center gap-2">
@@ -203,8 +203,8 @@ export const ApiBackendCard: React.FC<ApiBackendCardProps> = ({
               onChangeSettings({ useDemoMode: checked });
               onToggleDemoMode();
             }}
-            label="Use Demo Mode"
-            description="Force deterministic fixture profiles when backend is offline"
+            label="Live Mode"
+            description="Connect to the backend"
           />
         </div>
 

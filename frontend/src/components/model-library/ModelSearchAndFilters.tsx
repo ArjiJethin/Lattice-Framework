@@ -9,8 +9,8 @@ interface ModelSearchAndFiltersProps {
   activeFilter: ModelFilterMode;
   onFilterChange: (filter: ModelFilterMode) => void;
   totalCount: number;
-  installedCount: number;
   readyCount: number;
+  upcomingCount: number;
 }
 
 export const ModelSearchAndFilters: React.FC<ModelSearchAndFiltersProps> = ({
@@ -19,8 +19,8 @@ export const ModelSearchAndFilters: React.FC<ModelSearchAndFiltersProps> = ({
   activeFilter,
   onFilterChange,
   totalCount,
-  installedCount,
   readyCount,
+  upcomingCount,
 }) => {
   return (
     <div className="space-y-2 pb-2.5 shrink-0 border-b border-[#E6EAF0]">
@@ -60,8 +60,8 @@ export const ModelSearchAndFilters: React.FC<ModelSearchAndFiltersProps> = ({
         onChange={onFilterChange}
         options={[
           { id: 'all', label: 'All', count: totalCount },
-          { id: 'installed', label: 'Installed', count: installedCount },
           { id: 'ready', label: 'Ready', count: readyCount },
+          { id: 'upcoming', label: 'Upcoming', count: upcomingCount },
         ]}
       />
     </div>

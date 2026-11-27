@@ -21,7 +21,7 @@ export const SelectedModelCard: React.FC<SelectedModelCardProps> = ({
     selectedVariant?.name ||
     model.defaultVariantId.split('-').pop()?.toUpperCase() ||
     'Q4_K_M';
-  const isInstalled = model.status === 'Installed';
+  const isReady = model.status === 'Ready' || model.status === 'Installed';
 
   return (
     <div className="w-full bg-white rounded-lg border border-[#D9DEE7] shadow-2xs p-4 flex items-center justify-between flex-wrap gap-4">
@@ -43,8 +43,8 @@ export const SelectedModelCard: React.FC<SelectedModelCardProps> = ({
             <StatusBadge tone="accent" dot={false}>
               <span className="font-mono">{activeQuantization}</span>
             </StatusBadge>
-            <StatusBadge tone={isInstalled ? 'success' : 'neutral'}>
-              {model.status || 'Available'}
+            <StatusBadge tone={isReady ? 'success' : 'neutral'}>
+              {model.status || 'Upcoming'}
             </StatusBadge>
           </div>
 

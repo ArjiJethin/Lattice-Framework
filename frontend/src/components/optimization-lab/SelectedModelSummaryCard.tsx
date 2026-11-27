@@ -21,7 +21,7 @@ export const SelectedModelSummaryCard: React.FC<SelectedModelSummaryCardProps> =
     selectedVariant?.name ||
     model.defaultVariantId.split('-').pop()?.toUpperCase() ||
     'Q4_K_M';
-  const isInstalled = model.status === 'Installed';
+  const isReady = model.status === 'Ready' || model.status === 'Installed';
   const profiledCount = model.variants.filter((v) => v.isProfiled).length;
 
   return (
@@ -40,8 +40,8 @@ export const SelectedModelSummaryCard: React.FC<SelectedModelSummaryCardProps> =
             <h2 className="text-[16px] font-semibold text-[#222938] tracking-tight leading-tight">
               {model.name}
             </h2>
-            <StatusBadge tone={isInstalled ? 'success' : 'neutral'}>
-              {model.status || 'Available'}
+            <StatusBadge tone={isReady ? 'success' : 'neutral'}>
+              {model.status || 'Upcoming'}
             </StatusBadge>
             <span className="text-[11px] font-mono text-[#647187] bg-[#F8F9FB] px-1.5 py-0.5 rounded-sm border border-[#E6EAF0] tabular-nums">
               {profiledCount}/{model.variants.length} Profiled

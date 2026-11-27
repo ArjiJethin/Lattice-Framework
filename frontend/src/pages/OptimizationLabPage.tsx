@@ -8,6 +8,7 @@ import {
   OptimizationConstraints,
   OptimizationCandidate,
   OptimizationDecisionResult,
+  OptimizationProgress,
 } from '../types/optimizationLab';
 import {
   DEFAULT_OPTIMIZATION_CONSTRAINTS,
@@ -40,52 +41,107 @@ export const OptimizationLabPage: React.FC<OptimizationLabPageProps> = ({
   const [constraints, setConstraints] = useState<OptimizationConstraints>(
     DEFAULT_OPTIMIZATION_CONSTRAINTS
   );
+  const [solvedConstraints, setSolvedConstraints] = useState<OptimizationConstraints>(
+    DEFAULT_OPTIMIZATION_CONSTRAINTS
+  );
   const [hasUnsolvedChanges, setHasUnsolvedChanges] = useState(false);
-
-  const candidates = useMemo(() => {
-    return buildOptimizationCandidates(selectedModel, allModels, constraints);
-  }, [selectedModel, allModels, constraints]);
 
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [decision, setDecision] = useState<OptimizationDecisionResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState<OptimizationProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Keep a ref to latest constraints so model-change effect doesn't auto-fire on every slider drag
+  // Keep refs to latest constraints and in-flight abort controller
   const constraintsRef = useRef(constraints);
   constraintsRef.current = constraints;
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const executeSolver = useCallback(
-    async (activeConstraints: OptimizationConstraints) => {
+    async (activeConstraints: OptimizationConstraints, simulateDuration = true) => {
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       setIsLoading(true);
       setError(null);
+      if (simulateDuration) {
+        setProgress({
+          percent: 4,
+          stage: 'Initializing Pareto constraint solver...',
+          elapsedMs: 0,
+        });
+      }
+
       try {
         const result = await evaluateOptimization(
           selectedModel,
           allModels,
           activeConstraints,
-          backendState.connected
+          backendState.connected,
+          {
+            simulateDuration,
+            onProgress: (p) => {
+              if (!controller.signal.aborted) {
+                setProgress(p);
+              }
+            },
+            signal: controller.signal,
+            activeVariantName: selectedVariant?.name,
+          }
         );
+
+        if (controller.signal.aborted) return;
+
+        setSolvedConstraints(activeConstraints);
         setDecision(result);
         setHasUnsolvedChanges(false);
+
         if (result.recommendedCandidate) {
           setSelectedCandidateId(result.recommendedCandidate.id);
+        } else {
+          const fallbackCand = result.candidates?.find((c) => c.isCurrentModelVariant);
+          if (fallbackCand) {
+            setSelectedCandidateId(fallbackCand.id);
+          }
         }
       } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return;
+        }
         const message =
           err instanceof Error ? err.message : 'Optimization plan request failed.';
         setError(message);
       } finally {
-        setIsLoading(false);
+        if (abortControllerRef.current === controller) {
+          setIsLoading(false);
+          setProgress(null);
+        }
       }
     },
-    [selectedModel, allModels, backendState.connected]
+    [selectedModel, allModels, backendState.connected, selectedVariant?.name]
   );
 
-  // Run optimization automatically only when the selected model or backend connection changes
+  // Hydrate initial state on mount or model switch; explicit runs use 3-7s simulation
   useEffect(() => {
-    executeSolver(constraintsRef.current);
+    executeSolver(constraintsRef.current, false);
+    return () => {
+      abortControllerRef.current?.abort();
+    };
   }, [selectedModel.id, executeSolver]);
+
+  // Candidates always stay synchronized with the latest committed solver run
+  const candidates = useMemo(() => {
+    if (decision?.candidates && decision.candidates.length > 0) {
+      return decision.candidates;
+    }
+    return buildOptimizationCandidates(
+      selectedModel,
+      allModels,
+      solvedConstraints,
+      selectedVariant?.name
+    );
+  }, [decision?.candidates, selectedModel, allModels, solvedConstraints, selectedVariant?.name]);
 
   // Ensure a valid candidate is always selected for inspection
   const selectedCandidate = useMemo<OptimizationCandidate | null>(() => {
@@ -113,11 +169,12 @@ export const OptimizationLabPage: React.FC<OptimizationLabPageProps> = ({
 
   const handleResetConstraints = useCallback(() => {
     setConstraints(DEFAULT_OPTIMIZATION_CONSTRAINTS);
-    executeSolver(DEFAULT_OPTIMIZATION_CONSTRAINTS);
+    setHasUnsolvedChanges(false);
+    executeSolver(DEFAULT_OPTIMIZATION_CONSTRAINTS, true);
   }, [executeSolver]);
 
   const handleRunOptimization = useCallback(() => {
-    executeSolver(constraints);
+    executeSolver(constraints, true);
   }, [executeSolver, constraints]);
 
   return (
@@ -143,6 +200,8 @@ export const OptimizationLabPage: React.FC<OptimizationLabPageProps> = ({
         onResetConstraints={handleResetConstraints}
         onRunOptimization={handleRunOptimization}
         isLoading={isLoading}
+        progress={progress}
+        lastSolveDurationMs={decision?.solveDurationMs}
         hasUnsolvedChanges={hasUnsolvedChanges}
         error={error}
       />
@@ -154,7 +213,9 @@ export const OptimizationLabPage: React.FC<OptimizationLabPageProps> = ({
             selectedCandidate={selectedCandidate}
             recommendedCandidateId={decision?.recommendedCandidate?.id || null}
             onSelectCandidate={(cand) => setSelectedCandidateId(cand.id)}
-            constraints={constraints}
+            constraints={solvedConstraints}
+            isLoading={isLoading}
+            progress={progress}
           />
         </div>
 
@@ -165,9 +226,10 @@ export const OptimizationLabPage: React.FC<OptimizationLabPageProps> = ({
             activeVariantName={selectedVariant?.name}
             onSelectCandidate={(cand) => setSelectedCandidateId(cand.id)}
             onNavigateToExperiments={() => onNavigate('experiments')}
-            constraints={constraints}
+            constraints={solvedConstraints}
             candidates={candidates}
             isLoading={isLoading}
+            progress={progress}
             hasUnsolvedChanges={hasUnsolvedChanges}
           />
         </div>

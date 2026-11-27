@@ -21,15 +21,15 @@ export const ModelFamilyList: React.FC<ModelFamilyListProps> = ({
   const counts = useMemo(() => {
     return {
       total: models.length,
-      installed: models.filter((m) => m.status === 'Installed').length,
       ready: models.filter((m) => m.status === 'Ready').length,
+      upcoming: models.filter((m) => m.status === 'Upcoming').length,
     };
   }, [models]);
 
   const filteredModels = useMemo(() => {
     return models.filter((m) => {
-      if (activeFilter === 'installed' && m.status !== 'Installed') return false;
       if (activeFilter === 'ready' && m.status !== 'Ready') return false;
+      if (activeFilter === 'upcoming' && m.status !== 'Upcoming') return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -52,8 +52,8 @@ export const ModelFamilyList: React.FC<ModelFamilyListProps> = ({
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}
         totalCount={counts.total}
-        installedCount={counts.installed}
         readyCount={counts.ready}
+        upcomingCount={counts.upcoming}
       />
 
       <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pt-2 pr-1 select-none">

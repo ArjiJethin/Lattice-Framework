@@ -68,13 +68,23 @@ export interface OptimizationCandidate {
   generationSpeedToks: number | null;
   qualityScore: number | null;
   ttftMs?: number | null;
+  effectiveLatencyMs?: number | null;
+  vramOverflowGb?: number;
+  isProfiled?: boolean;
   status: CandidateFeasibility;
   feasibilityScore?: number;
+  rank?: number | null;
   isParetoOptimal?: boolean;
   rejectionReasons: string[];
   audit: CandidateConstraintAudit;
   provenance: DataProvenance;
   isCurrentModelVariant: boolean;
+}
+
+export interface OptimizationProgress {
+  percent: number;
+  stage: string;
+  elapsedMs: number;
 }
 
 export interface OptimizationAlternative {
@@ -92,12 +102,17 @@ export interface OptimizationDecisionResult {
   decisionId: string;
   status: 'optimal' | 'feasible' | 'infeasible';
   recommendedCandidate: OptimizationCandidate | null;
+  candidates?: OptimizationCandidate[];
   whyThisConfiguration: string[];
   alternatives: OptimizationAlternative[];
   rationale: string;
   timestamp: string;
   isLiveResponse: boolean;
   algorithm: string;
+  solveDurationMs?: number;
+  evaluatedCount?: number;
+  feasibleCount?: number;
+  paretoCount?: number;
 }
 
 export type CandidateStatisticsTab = 'plot' | 'table' | 'comparison';

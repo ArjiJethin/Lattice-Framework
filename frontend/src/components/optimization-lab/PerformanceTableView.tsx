@@ -18,6 +18,7 @@ type SortField =
   | 'inferenceLatencyMs'
   | 'generationSpeedToks'
   | 'qualityScore'
+  | 'feasibilityScore'
   | 'status';
 type SortDirection = 'asc' | 'desc';
 
@@ -209,6 +210,15 @@ export const PerformanceTableView: React.FC<PerformanceTableViewProps> = ({
                       <ArrowUpDown className="w-3 h-3 text-[#8A94A6]" />
                     </div>
                   </th>
+                  <th
+                    onClick={() => handleSort('feasibilityScore')}
+                    className="py-2 px-2.5 cursor-pointer hover:text-[#222938] text-right"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Score</span>
+                      <ArrowUpDown className="w-3 h-3 text-[#8A94A6]" />
+                    </div>
+                  </th>
                   <th className="py-2 px-2.5">Status</th>
                   <th className="py-2 pr-3 text-right">Action</th>
                 </tr>
@@ -283,6 +293,18 @@ export const PerformanceTableView: React.FC<PerformanceTableViewProps> = ({
                           }`}
                       >
                         {cand.qualityScore !== null ? cand.qualityScore.toFixed(1) : '—'}
+                      </td>
+                      <td className="py-2 px-2.5 font-mono text-[11.5px] text-right tabular-nums text-[#222938]">
+                        {cand.feasibilityScore !== undefined ? (
+                          <span>
+                            {cand.feasibilityScore.toFixed(0)}
+                            {cand.rank ? (
+                              <span className="text-[10px] text-[#647187] ml-1">#{cand.rank}</span>
+                            ) : null}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="py-2 px-2.5">
                         <StatusBadge tone={statusTone} dot={cand.status === 'feasible'}>

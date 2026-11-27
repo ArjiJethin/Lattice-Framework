@@ -87,7 +87,7 @@ export const MetricsComparisonView: React.FC<MetricsComparisonViewProps> = ({
           type: 'value',
           name: 'Score / tok/s',
           min: 0,
-          max: 100,
+          max: (val: { max: number }) => Math.max(100, Math.ceil((val.max || 100) / 20) * 20),
           nameTextStyle: { color: '#647187', fontSize: 10.5 },
           axisLabel: {
             color: '#647187',
@@ -155,7 +155,9 @@ export const MetricsComparisonView: React.FC<MetricsComparisonViewProps> = ({
                   : 'text-[#0D8A58]'
                 }`}
             >
-              Budget: ≤ {constraints.maxMemoryGb.toFixed(1)} GB
+              {activeCandidate.audit.memoryDeltaGb !== null
+                ? `${activeCandidate.audit.memoryDeltaGb > 0 ? `+${activeCandidate.audit.memoryDeltaGb.toFixed(1)} GB over` : `${Math.abs(activeCandidate.audit.memoryDeltaGb).toFixed(1)} GB headroom`}`
+                : `Budget: ≤ ${constraints.maxMemoryGb.toFixed(1)} GB`}
             </span>
           </div>
         </div>
@@ -177,7 +179,9 @@ export const MetricsComparisonView: React.FC<MetricsComparisonViewProps> = ({
                   : 'text-[#0D8A58]'
                 }`}
             >
-              Limit: ≤ {constraints.maxLatencyMs} ms
+              {activeCandidate.audit.latencyDeltaMs !== null
+                ? `${activeCandidate.audit.latencyDeltaMs > 0 ? `+${activeCandidate.audit.latencyDeltaMs} ms over` : `${Math.abs(activeCandidate.audit.latencyDeltaMs)} ms headroom`}`
+                : `Limit: ≤ ${constraints.maxLatencyMs} ms`}
             </span>
           </div>
         </div>
@@ -195,8 +199,10 @@ export const MetricsComparisonView: React.FC<MetricsComparisonViewProps> = ({
                 ? `${activeCandidate.generationSpeedToks} tok/s`
                 : '—'}
             </span>
-            <span className="text-[10.5px] text-[#647187] block mt-0.5">
-              Sustained decode rate
+            <span className="text-[10.5px] font-mono text-[#647187] block mt-0.5 tabular-nums">
+              {activeCandidate.feasibilityScore !== undefined
+                ? `Score: ${activeCandidate.feasibilityScore.toFixed(1)}/100`
+                : 'Sustained decode rate'}
             </span>
           </div>
         </div>
@@ -218,7 +224,9 @@ export const MetricsComparisonView: React.FC<MetricsComparisonViewProps> = ({
                   : 'text-[#0D8A58]'
                 }`}
             >
-              Min: ≥ {constraints.minQualityScore}
+              {activeCandidate.audit.qualityDeltaScore !== null
+                ? `${activeCandidate.audit.qualityDeltaScore >= 0 ? `+${activeCandidate.audit.qualityDeltaScore.toFixed(1)} margin` : `${activeCandidate.audit.qualityDeltaScore.toFixed(1)} short`}`
+                : `Min: ≥ ${constraints.minQualityScore}`}
             </span>
           </div>
         </div>
@@ -228,6 +236,7 @@ export const MetricsComparisonView: React.FC<MetricsComparisonViewProps> = ({
       <div className="w-full h-[250px] bg-[#F8F9FB] rounded-md border border-[#D9DEE7] p-2">
         <ReactECharts
           option={barOption}
+          notMerge={true}
           style={{ height: '100%', width: '100%' }}
           onEvents={{
             click: (params: any) => {

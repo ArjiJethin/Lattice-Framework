@@ -11,9 +11,9 @@ import {
 
 export function useModelLibrary() {
   const [models] = useState<ModelFamily[]>(() => getModelFamilies());
-  const [selectedModelId, setSelectedModelId] = useState<string>('qwen3-1.7b');
-  const [selectedVariantId, setSelectedVariantId] = useState<string>('qwen3-1.7b-q4_k_m');
-  const [selectedComparisonIds, setSelectedComparisonIds] = useState<string[]>(['qwen3-1.7b-q4_k_m']);
+  const [selectedModelId, setSelectedModelId] = useState<string>('qwen2.5-0.5b');
+  const [selectedVariantId, setSelectedVariantId] = useState<string>('qwen2.5-0.5b-q4_k_m');
+  const [selectedComparisonIds, setSelectedComparisonIds] = useState<string[]>(['qwen2.5-0.5b-q4_k_m']);
   const [animationState, setAnimationState] = useState<ModelAnimationState>('idle');
   const [isCompareOpen, setIsCompareOpen] = useState(false);
 

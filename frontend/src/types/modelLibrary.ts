@@ -36,7 +36,12 @@ export interface ModelColorPalette {
 
 export type ModelAnimationState = 'idle' | 'selected' | 'evaluating' | 'completed';
 
-export type ModelInstallationStatus = 'Installed' | 'Ready' | 'Not Installed' | 'Incompatible';
+export type ModelInstallationStatus =
+  | 'Ready'
+  | 'Upcoming'
+  | 'Installed'
+  | 'Not Installed'
+  | 'Incompatible';
 
 export type VariantProfilingStatus = 'Profiled' | 'Not Profiled' | 'Evaluating' | 'Failed';
 
@@ -83,7 +88,7 @@ export interface ModelFamily {
   incompatibilityReason?: string;
 }
 
-export type ModelFilterMode = 'all' | 'installed' | 'ready';
+export type ModelFilterMode = 'all' | 'ready' | 'upcoming';
 
 export type ModelInspectorTab = 'overview' | 'performance' | 'compatibility' | 'files';
 

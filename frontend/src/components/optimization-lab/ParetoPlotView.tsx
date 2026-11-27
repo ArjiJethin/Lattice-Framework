@@ -28,6 +28,10 @@ export const ParetoPlotView: React.FC<ParetoPlotViewProps> = ({
     rejectedPoints,
     unprofiledPoints,
     selectedPoint,
+    recommendedPoint,
+    maxPlotMem,
+    minPlotLat,
+    maxPlotLat,
     unplottableCount,
   } = useMemo(() => {
     const feasible: Array<[number, number, OptimizationCandidate]> = [];
@@ -35,13 +39,23 @@ export const ParetoPlotView: React.FC<ParetoPlotViewProps> = ({
     const rejected: Array<[number, number, OptimizationCandidate]> = [];
     const unprofiled: Array<[number, number, OptimizationCandidate]> = [];
     let selected: [number, number, OptimizationCandidate] | null = null;
+    let recommended: [number, number, OptimizationCandidate] | null = null;
     let unplottable = 0;
+    let maxMem = 0;
+    let minLat = Infinity;
+    let maxLat = 0;
 
     candidates.forEach((c) => {
       // Only plot points that have actual numeric memory & latency coordinates
       if (c.memoryUsageGb === null || c.inferenceLatencyMs === null || c.inferenceLatencyMs <= 0) {
         if (c.isCurrentModelVariant) unplottable++;
         return;
+      }
+
+      if (c.isCurrentModelVariant) {
+        maxMem = Math.max(maxMem, c.memoryUsageGb);
+        minLat = Math.min(minLat, c.inferenceLatencyMs);
+        maxLat = Math.max(maxLat, c.inferenceLatencyMs);
       }
 
       const pt: [number, number, OptimizationCandidate] = [
@@ -52,6 +66,9 @@ export const ParetoPlotView: React.FC<ParetoPlotViewProps> = ({
 
       if (selectedCandidate && c.id === selectedCandidate.id) {
         selected = pt;
+      }
+      if (recommendedCandidateId && c.id === recommendedCandidateId) {
+        recommended = pt;
       }
 
       if (c.status === 'unprofiled') {
@@ -71,16 +88,25 @@ export const ParetoPlotView: React.FC<ParetoPlotViewProps> = ({
       rejectedPoints: rejected,
       unprofiledPoints: unprofiled,
       selectedPoint: selected,
+      recommendedPoint: recommended,
+      maxPlotMem: maxMem,
+      minPlotLat: Number.isFinite(minLat) ? minLat : 50,
+      maxPlotLat: maxLat,
       unplottableCount: unplottable,
     };
-  }, [candidates, selectedCandidate]);
+  }, [candidates, selectedCandidate, recommendedCandidateId]);
 
   const paretoFrontierPoints = useMemo(() => {
     return computeParetoFrontierPoints(candidates);
   }, [candidates]);
 
   const chartOption = useMemo<EChartsOption>(() => {
-    const maxMemBound = Math.max(8, Math.ceil(constraints.maxMemoryGb + 2), 16);
+    const maxMemBound = Math.max(
+      6,
+      Math.ceil(Math.max(maxPlotMem, constraints.maxMemoryGb) * 1.15)
+    );
+    const yMinBound = minPlotLat < 50 ? 20 : 50;
+    const yMaxBound = Math.max(2000, Math.ceil(Math.max(maxPlotLat, constraints.maxLatencyMs) * 1.35));
 
     return {
       backgroundColor: 'transparent',
@@ -132,12 +158,18 @@ export const ParetoPlotView: React.FC<ParetoPlotViewProps> = ({
                   ${cand.inferenceLatencyMs !== null ? `${cand.inferenceLatencyMs} ms` : '—'} (≤ ${constraints.maxLatencyMs} ms)
                 </span>
               </div>
-              <div style="display: flex; justify-content: space-between; font-size: 11px;">
+              <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px;">
                 <span style="color: #647187;">Quality:</span>
                 <span style="font-family: monospace; font-weight: 600; color: ${qualOk === false ? '#DC2626' : '#222938'};">
                   ${cand.qualityScore !== null ? cand.qualityScore.toFixed(1) : '—'} (≥ ${constraints.minQualityScore})
                 </span>
               </div>
+              ${cand.feasibilityScore !== undefined ? `<div style="display: flex; justify-content: space-between; font-size: 11px;">
+                <span style="color: #647187;">Score / Rank:</span>
+                <span style="font-family: monospace; font-weight: 600; color: #7562E8;">
+                  ${cand.feasibilityScore.toFixed(1)}/100${cand.rank ? ` (#${cand.rank})` : ''}
+                </span>
+              </div>` : ''}
             </div>
           `;
         },
@@ -166,8 +198,8 @@ export const ParetoPlotView: React.FC<ParetoPlotViewProps> = ({
         name: 'Inference Latency (ms, log scale)',
         nameLocation: 'middle',
         nameGap: 40,
-        min: 50,
-        max: 2000,
+        min: yMinBound,
+        max: yMaxBound,
         logBase: 10,
         nameTextStyle: { color: '#647187', fontSize: 11, fontWeight: 600 },
         axisLine: { lineStyle: { color: '#D9DEE7' } },
@@ -188,8 +220,8 @@ export const ParetoPlotView: React.FC<ParetoPlotViewProps> = ({
           symbol: 'none',
           silent: true,
           data: [
-            [constraints.maxMemoryGb, 50],
-            [constraints.maxMemoryGb, 2000],
+            [constraints.maxMemoryGb, yMinBound],
+            [constraints.maxMemoryGb, yMaxBound],
           ],
           lineStyle: { color: '#2563EB', width: 1, type: 'dotted', opacity: 0.7 },
           z: 1,
@@ -253,13 +285,30 @@ export const ParetoPlotView: React.FC<ParetoPlotViewProps> = ({
           itemStyle: { color: '#0D8A58', opacity: 0.95 },
           z: 6,
         },
+        // Solver Recommended Point Halo
+        ...(recommendedPoint
+          ? [
+            {
+              name: 'Recommended',
+              type: 'scatter',
+              symbolSize: 18,
+              data: [recommendedPoint] as any,
+              itemStyle: {
+                color: 'transparent',
+                borderColor: '#0D8A58',
+                borderWidth: 2,
+              },
+              z: 9,
+            },
+          ]
+          : []),
         // Currently Selected / Inspected Point Highlight Ring
         ...(selectedPoint
           ? [
             {
               name: 'Selected',
               type: 'scatter',
-              symbolSize: 15,
+              symbolSize: 14,
               data: [selectedPoint] as any,
               itemStyle: {
                 color: '#7562E8',
@@ -280,7 +329,11 @@ export const ParetoPlotView: React.FC<ParetoPlotViewProps> = ({
     rejectedPoints,
     unprofiledPoints,
     selectedPoint,
+    recommendedPoint,
     paretoFrontierPoints,
+    maxPlotMem,
+    minPlotLat,
+    maxPlotLat,
     constraints.maxMemoryGb,
     constraints.maxLatencyMs,
     constraints.minQualityScore,
@@ -319,6 +372,10 @@ export const ParetoPlotView: React.FC<ParetoPlotViewProps> = ({
       {/* Plot Legend & Constraint Reference Key */}
       <div className="flex items-center justify-between px-1 py-0.5 text-[11px] font-medium text-[#647187] flex-wrap gap-2">
         <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full border-2 border-[#0D8A58] bg-transparent" />
+            <span className="text-[#0D8A58] font-semibold">Recommended</span>
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-[#7562E8] border border-white shadow-2xs" />
             <span className="text-[#222938] font-semibold">Inspected</span>
