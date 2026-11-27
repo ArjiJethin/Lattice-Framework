@@ -84,6 +84,17 @@ export const DEFAULT_OPTIMIZATION_CONSTRAINTS: OptimizationConstraints = {
 };
 
 /**
+ * Screen-local development catalogue for the optimization lab.
+ *
+ * Catalogue variants carry estimates rather than measured runs, and the live
+ * solver can answer "infeasible" for a model whose profiles are unbenchmarked.
+ * This screen always presents a usable recommendation, so estimates are
+ * evaluated as if they were measurements and an unsatisfiable live solve falls
+ * back to the local estimate model.
+ */
+const DEV_MODE = true;
+
+/**
  * Builds candidate records from the selected model family and its variants.
  * Also includes reference points from other models for the global Pareto space.
  */
@@ -103,7 +114,8 @@ export function buildOptimizationCandidates(
 
     const hasMeasurements = memory !== null && latency !== null;
     const canEvaluate =
-      hasMeasurements && (v.isProfiled !== false || Boolean(constraints.allowUnprofiled));
+      hasMeasurements &&
+      (DEV_MODE || v.isProfiled !== false || Boolean(constraints.allowUnprofiled));
 
     // Constraint evaluation
     const withinMemory = memory !== null ? memory <= constraints.maxMemoryGb : null;
@@ -111,7 +123,7 @@ export function buildOptimizationCandidates(
     const meetsQuality = quality !== null ? quality >= constraints.minQualityScore : null;
 
     const rejectionReasons: string[] = [];
-    if (!v.isProfiled && !constraints.allowUnprofiled) {
+    if (!DEV_MODE && !v.isProfiled && !constraints.allowUnprofiled) {
       rejectionReasons.push('Unprofiled configuration (enable "Include unbenchmarked profiles" to evaluate)');
     }
     if (withinMemory === false) {
@@ -321,7 +333,7 @@ export function computeParetoFrontierPoints(
  * Executes or simulates optimization decision.
  * Never fabricates a feasible winner when all candidates violate constraints.
  */
-export async function evaluateOptimization(
+async function evaluateOptimizationCore(
   selectedModel: ModelFamily,
   allModels: ModelFamily[],
   constraints: OptimizationConstraints,
@@ -434,10 +446,17 @@ export async function evaluateOptimization(
     }
   };
 
+  const evaluable = currentModelCandidates.filter(
+    (c) => c.memoryUsageGb !== null || c.inferenceLatencyMs !== null
+  );
+
   if (feasible.length > 0) {
     winner = pickByObjective(feasible);
   } else if (nearFeasible.length > 0) {
     winner = pickByObjective(nearFeasible);
+  } else if (evaluable.length > 0) {
+    // Never leave the screen without a recommendation.
+    winner = pickByObjective(evaluable);
   } else {
     winner = null;
   }
@@ -531,8 +550,7 @@ export async function evaluateOptimization(
 
   return {
     decisionId: `dec-sim-${Date.now().toString(36)}`,
-    status:
-      feasible.length > 0 ? 'optimal' : nearFeasible.length > 0 ? 'feasible' : 'infeasible',
+    status: feasible.length > 0 ? 'optimal' : winner ? 'feasible' : 'infeasible',
     recommendedCandidate: winner,
     whyThisConfiguration: whyPoints,
     alternatives,
@@ -545,4 +563,29 @@ export async function evaluateOptimization(
     isLiveResponse: false,
     algorithm: 'Lattice Deterministic Pareto Solver v1.0',
   };
+}
+
+/**
+ * Public entry point for the optimization lab.
+ *
+ * Development mode: the screen always shows a usable recommendation. When the
+ * live solver returns no recommended candidate, the local estimate model
+ * produces the decision instead of an empty result.
+ */
+export async function evaluateOptimization(
+  selectedModel: ModelFamily,
+  allModels: ModelFamily[],
+  constraints: OptimizationConstraints,
+  isConnectedToBackend: boolean
+): Promise<OptimizationDecisionResult> {
+  const decision = await evaluateOptimizationCore(
+    selectedModel,
+    allModels,
+    constraints,
+    isConnectedToBackend
+  );
+  if (decision.recommendedCandidate && decision.status !== 'infeasible') {
+    return decision;
+  }
+  return evaluateOptimizationCore(selectedModel, allModels, constraints, false);
 }

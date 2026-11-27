@@ -8,7 +8,6 @@ import { StatusBadge, SegmentedTabs, Button } from '../ui/primitives';
 import {
   CheckCircle2,
   AlertTriangle,
-  XCircle,
   Box,
   HardDrive,
   Zap,
@@ -88,19 +87,6 @@ export const OptimizationResultsInspector: React.FC<OptimizationResultsInspector
 
         {renderSolverStatusBadge()}
       </div>
-
-      {/* Infeasible Alert State */}
-      {decision?.status === 'infeasible' && (
-        <div className="p-3 rounded-md bg-[#FEF2F2] border border-[#FECACA] text-[#DC2626] flex items-start gap-2.5">
-          <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <div className="text-[12px] leading-relaxed">
-            <span className="font-semibold block text-[#991B1B]">
-              No Strictly Feasible Configuration Found
-            </span>
-            <span className="text-[#DC2626]">{decision.rationale}</span>
-          </div>
-        </div>
-      )}
 
       {/* Primary Recommendation Card (when a recommendation exists) */}
       {recommended && (

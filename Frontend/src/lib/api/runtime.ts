@@ -184,16 +184,29 @@ export interface WorkloadSpec {
   contextRequirement?: number;
 }
 
-/** Create a workload once per signature and reuse it for later runs. */
-export async function ensureWorkload(spec: WorkloadSpec): Promise<string> {
-  const signature = `${spec.name}:${spec.outputTokens}:${spec.prompt}`;
-  const cached = workloadCache.get(signature);
-  if (cached) return cached;
+interface WorkloadSummary {
+  id: string;
+  name: string;
+  enabled?: boolean;
+  deleted_at?: string | null;
+}
 
-  const created = await request<{ id: string }>('/workloads', {
+/** Workload names are unique in the backend, so reuse the existing row. */
+async function findWorkloadIdByName(name: string): Promise<string | null> {
+  const payload = await request<{ items?: WorkloadSummary[] }>(
+    `/workloads?limit=50&search=${encodeURIComponent(name)}`
+  );
+  const match = (payload.items ?? []).find(
+    (item) => item.name === name && !item.deleted_at
+  );
+  return match?.id ?? null;
+}
+
+function createWorkload(name: string, spec: WorkloadSpec) {
+  return request<{ id: string }>('/workloads', {
     method: 'POST',
     body: JSON.stringify({
-      name: spec.name,
+      name,
       workload_type: 'generation',
       input_spec: {
         prompt: spec.prompt,
@@ -204,8 +217,44 @@ export async function ensureWorkload(spec: WorkloadSpec): Promise<string> {
       dataset_reference: 'lattice-desktop',
     }),
   });
-  workloadCache.set(signature, created.id);
-  return created.id;
+}
+
+/**
+ * Resolve a workload for a run. The same workload can be benchmarked any number
+ * of times, so an existing workload with the same name is reused instead of
+ * failing the submission with a name conflict.
+ */
+export async function ensureWorkload(spec: WorkloadSpec): Promise<string> {
+  const signature = `${spec.name}:${spec.outputTokens}:${spec.prompt}`;
+  const cached = workloadCache.get(signature);
+  if (cached) return cached;
+
+  const existingId = await findWorkloadIdByName(spec.name).catch(() => null);
+  if (existingId) {
+    workloadCache.set(signature, existingId);
+    return existingId;
+  }
+
+  try {
+    const created = await createWorkload(spec.name, spec);
+    workloadCache.set(signature, created.id);
+    return created.id;
+  } catch (error) {
+    if (error instanceof BackendError && error.status === 409) {
+      // Someone created it between the lookup and the insert: reuse that row.
+      const raced = await findWorkloadIdByName(spec.name).catch(() => null);
+      if (raced) {
+        workloadCache.set(signature, raced);
+        return raced;
+      }
+      // Last resort: a unique name keeps the run possible.
+      const suffix = Date.now().toString(36);
+      const created = await createWorkload(`${spec.name}-${suffix}`, spec);
+      workloadCache.set(signature, created.id);
+      return created.id;
+    }
+    throw error;
+  }
 }
 
 export interface BenchmarkSubmission {

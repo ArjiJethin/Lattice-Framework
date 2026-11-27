@@ -609,7 +609,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             ref={scrollRef}
             role="log"
             aria-live="polite"
-            className="rounded-md border border-[#D9DEE7] bg-[#F8F9FB] p-3 min-h-[360px] max-h-[560px] overflow-y-auto flex flex-col gap-3"
+            className="rounded-md border border-[#D9DEE7] bg-[#F8F9FB] p-3 min-h-[560px] max-h-[840px] overflow-y-auto flex flex-col gap-3"
           >
             {messages.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 py-16">
